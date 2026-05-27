@@ -1,0 +1,54 @@
+[
+  {
+    "id": "1",
+    "title": "EverSip Persona Study",
+    "description": "Lorem ipsum dolor sit amet consectetur, adipisicing elit. Saepe id aliquid dolorum, atque culpa in possimus fuga repellat libero non accusantium corrupti adipisci laudantium fugit voluptas? Ducimus dicta deleniti perspiciatis.",
+    "createdAt": "Nov 15, 2025",
+    "files": [
+      {
+        "id": "1",
+        "title": "File 1"
+      },
+      {
+        "id": "2",
+        "title": "File 2"
+      },
+      {
+        "id": "3",
+        "title": "File 3"
+      }
+    ],
+    "personas": [
+      {
+        "id": "1"
+      },
+      {
+        "id": "2"
+      },
+      {
+        "id": "3"
+      }
+    ]
+  },
+  {
+    "id": "2",
+    "title": "Tech Product Launch Research",
+    "description": "Lorem ipsum dolor sit amet consectetur, adipisicing elit. Saepe id aliquid dolorum, atque culpa in possimus fuga repellat libero non accusantium corrupti adipisci laudantium fugit voluptas? Ducimus dicta deleniti perspiciatis.",
+    "createdAt": "Jan 8, 2026",
+    "files": [
+      {
+        "id": "1",
+        "title": "File 1"
+      },
+      {
+        "id": "2",
+        "title": "File 2"
+      }
+    ],
+    "personas": [
+      {
+        "id": "1"
+      }
+    ]
+  }
+]
