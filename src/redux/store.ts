@@ -1,6 +1,8 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
+import ProjectReducer from './ProjectSlice'
 
 const rootReducer = combineReducers({
+  Project: ProjectReducer
 });
 
 

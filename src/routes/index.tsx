@@ -16,7 +16,7 @@ const Router = createBrowserRouter([
     element: <ProtectedRoute element={<SignupPage />} reverse />,
   },
   {
-    path:"/chat",
+    path:"/chat/:id",
     element:<ChatPage/>
   },
   {

@@ -1,20 +1,20 @@
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Checkbox } from "@/components/ui/checkbox";
+// import { Checkbox } from "@/components/ui/checkbox";
 import { File, Users } from "lucide-react";
 import { Dropdown } from "./DropDown";
 
 const columnHelper = createColumnHelper<project>();
 
 const Column: ColumnDef<project, any>[] = [
-  {
-    id: "Select",
-    header: () => {
-      return <Checkbox />;
-    },
-    cell: () => {
-      return <Checkbox />;
-    },
-  },
+  // {
+  //   id: "Select",
+  //   header: () => {
+  //     return <Checkbox className="border-black/50" />;
+  //   },
+  //   cell: () => {
+  //     return <Checkbox />;
+  //   },
+  // },
   columnHelper.accessor("title", {
     header: "Project Title",
     cell: ({ row, getValue }) => {
@@ -80,7 +80,7 @@ const Column: ColumnDef<project, any>[] = [
     header:  () => {
       return (
         <div className="text-center">
-          CreatedAt
+          Created At
         </div>
       );
     },
@@ -93,7 +93,7 @@ const Column: ColumnDef<project, any>[] = [
     },
   }),
   {
-     id: "Select",
+     id: "Actions",
      header:"Actions",
      cell:({row})=>{
         const ProjectId = row.original.id;
