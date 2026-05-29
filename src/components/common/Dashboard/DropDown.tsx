@@ -15,7 +15,7 @@ export function Dropdown() {
         <Button variant="outline"><EllipsisVertical/></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuLabel>Open project</DropdownMenuLabel>
+        <DropdownMenuItem>Open project</DropdownMenuItem>
         <DropdownMenuItem>Delete</DropdownMenuItem>
         <DropdownMenuItem>Edit</DropdownMenuItem>
         <DropdownMenuItem>Settings</DropdownMenuItem>
