@@ -37,7 +37,7 @@ const Column: ColumnDef<project, any>[] = [
         </div>
       );
     },
-    cell: ({ row, getValue }) => {
+    cell: ({ getValue }) => {
       return (
         <div onClick={() => {}} className="w-full max-w-[20rem] overflow-hidden text-ellipsis cursor-pointer py-1">
           {getValue()}
@@ -98,8 +98,8 @@ const Column: ColumnDef<project, any>[] = [
   {
      id: "Actions",
      header:"Actions",
-     cell:({row})=>{
-        const ProjectId = row.original.id;
+     cell:()=>{
+        // const ProjectId = row.original.id;
         return (
             <Dropdown/>
         )

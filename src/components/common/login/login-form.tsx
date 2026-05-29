@@ -32,7 +32,7 @@ export function LoginForm({
 
   const navigate = useNavigate();
 
-  async function onChange(token: string | null) {
+  async function onChange() {
     setNotARobot(true);
     // try {
     //   if (!token) return;

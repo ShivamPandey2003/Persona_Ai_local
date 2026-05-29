@@ -1,6 +1,5 @@
 import { Logo } from "@/assets";
 import {
-  Sparkles,
   Mail,
   Lock,
   ArrowRight,

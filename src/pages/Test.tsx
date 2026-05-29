@@ -2,10 +2,6 @@ import { Logo } from "@/assets";
 import ProfileDropDown from "@/components/global/ProfileDropDown";
 import {
   Sparkles,
-  PenTool,
-  FolderOpen,
-  BadgeDollarSign,
-  Code2,
   ArrowRight,
   Brain,
   Wand2,

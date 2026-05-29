@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { PersonaDetail } from "@/data/DummyPersona"
 import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react"
 import { useState } from "react"
-import { Link, useNavigate } from "react-router"
+import { useNavigate } from "react-router"
 
 const confidenceColors: Record<string, string> = {
   High: "bg-emerald-100 text-emerald-800 border-emerald-200",

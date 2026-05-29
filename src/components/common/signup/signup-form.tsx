@@ -21,7 +21,7 @@ export function SignupForm({
 }: React.ComponentProps<"div">) {
   const [notARobot, setNotARobot] = useState<boolean>(false);
 
-  async function onChange(token: string | null) {
+  async function onChange() {
     setNotARobot(true);
     // try {
     //   if (!token) return;
