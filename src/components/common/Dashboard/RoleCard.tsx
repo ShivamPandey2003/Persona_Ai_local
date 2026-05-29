@@ -25,7 +25,7 @@ const RoleCard = ({ role, isSelected, setSelected }: Props) => {
       )}
       onClick={() => setSelected()}
     >
-      <CardHeader className="flex flex-row gap-2 md:gap-0 md:flex-col items-center md:items-start">
+      <CardHeader className="flex flex-row gap-2 md:gap-2 md:flex-col items-center md:items-start">
         <div
           className={cn(
             "md:mb-3 flex h-8 w-8 items-center justify-center rounded-lg transition-colors",

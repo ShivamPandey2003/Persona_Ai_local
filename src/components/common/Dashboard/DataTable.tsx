@@ -60,7 +60,7 @@ export function DataTable<TData, TValue>({
     >
       <div className={cn("h-full max-h-full")}>
         <div className="flex flex-col-reverse md:flex-row items-end md:items-center justify-between mb-2 gap-2">
-          <div className="w-full md:w-1/4 border flex items-center pr-2">
+          <div className="w-full md:w-1/4 border flex items-center pr-2 bg-white">
             <Input
               placeholder="Find the project..."
               value={""}

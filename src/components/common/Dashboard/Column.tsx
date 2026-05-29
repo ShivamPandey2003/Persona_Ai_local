@@ -2,6 +2,7 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 // import { Checkbox } from "@/components/ui/checkbox";
 import { File, Users } from "lucide-react";
 import { Dropdown } from "./DropDown";
+import { Link } from "react-router";
 
 const columnHelper = createColumnHelper<project>();
 
@@ -20,9 +21,11 @@ const Column: ColumnDef<project, any>[] = [
     cell: ({ row, getValue }) => {
       const ProjectId = row.original.id;
       return (
-        <div onClick={() => {}} className="w-full cursor-pointer py-1">
+        <Link to={'/chat'} state={{projectId:ProjectId}}>
+        <div className="w-full cursor-pointer py-1">
           {getValue()}
         </div>
+        </Link>
       );
     },
   }),

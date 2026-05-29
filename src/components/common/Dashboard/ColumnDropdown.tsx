@@ -10,7 +10,7 @@ const ColumnDropdown = <TData,>({ table }: Props<TData>) => {
   return (
     <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size={"sm"} variant="outline" className="ml-auto">
+            <Button size={"sm"} variant="outline" className="ml-auto bg-white">
               Columns
             </Button>
           </DropdownMenuTrigger>

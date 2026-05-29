@@ -37,6 +37,10 @@ const CreateProjectDailog = () => {
     setValue,
   } = useForm<CreateProjectForm>({
     resolver: zodResolver(CreateProject),
+    defaultValues:{
+      title:"",
+      role:"brand-representative"
+    }
   });
 
   const selectedRole = watch("role");
@@ -69,7 +73,7 @@ const CreateProjectDailog = () => {
           <span className="hidden sm:block">Create Project</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[700px]">
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
             <DialogTitle>Create Project</DialogTitle>

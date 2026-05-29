@@ -81,7 +81,7 @@ export function MultiFileUploadDialog({ open, setOpen, trigger, onUpload, accept
       {trigger && <DialogTrigger asChild>
         {trigger}
       </DialogTrigger>}
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" showCloseButton={false} onInteractOutside={(e)=>{e.preventDefault()}}>
         <DialogHeader>
           <DialogTitle>Upload files</DialogTitle>
           <DialogDescription>

@@ -26,13 +26,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (adminOnly) {
     if (!isAuthenticated) {
-      return <Navigate to="/" replace />;
+      return <Navigate to="/login" replace />;
     }
 
     return element;
   }
 
-  return isAuthenticated ? element : <Navigate to="/" replace />;
+  return isAuthenticated ? element : <Navigate to="/login" replace />;
 };
 
 export default ProtectedRoute;

@@ -45,24 +45,6 @@ function ConversationPromptInput() {
 
     const fullResponse = SCRIPT[assistantCount]?.content;
 
-    if (SCRIPT[assistantCount].createdAt) {
-      dispatch(
-        setProjects(
-          projects.map((item) => {
-            if (item.id === state.projectId) {
-              return {
-                ...item,
-                personas: PERSONA_DETAILS,
-              };
-            }
-
-            return item;
-          }),
-        ),
-      );
-      dispatch(setPersonaDialog(true));
-    }
-
     if (!fullResponse) {
       return;
     }
@@ -71,6 +53,20 @@ function ConversationPromptInput() {
     setIsStreaming(true);
 
     const messageId = Date.now();
+
+    dispatch(
+        setProjects(
+          projects.map((item) => {
+            if (item.id === state.projectId) {
+              return {
+                ...item,
+              };
+            }
+
+            return item;
+          }),
+        ),
+      );
 
     setMessages((prev) => [
       ...prev,
@@ -100,6 +96,24 @@ function ConversationPromptInput() {
         setIsStreaming(false);
       }
     }, 30);
+
+    if (SCRIPT[assistantCount].createdAt) {
+      dispatch(
+        setProjects(
+          projects.map((item) => {
+            if (item.id === state.projectId) {
+              return {
+                ...item,
+                personas: PERSONA_DETAILS,
+              };
+            }
+
+            return item;
+          }),
+        ),
+      );
+      dispatch(setPersonaDialog(true));
+    }
   };
 
   useEffect(() => {

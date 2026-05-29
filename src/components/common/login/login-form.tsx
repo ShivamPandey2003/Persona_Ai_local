@@ -12,13 +12,25 @@ import {
 import { Input } from "@/components/ui/input";
 import ReCAPTCHA from "react-google-recaptcha";
 import { ApiRecaptcha } from "@/types/constant.d";
-import { useState } from "react";
+import { useState, type SubmitEvent } from "react";
+import { PasswordInput } from "@/components/ui/password-input";
+import Users from "@/data/DummyUser.json";
+import { toast } from "sonner";
+import { useNavigate } from "react-router";
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const [notARobot, setNotARobot] = useState<boolean>(false);
+  const [userCred, setUserCred] = useState<{ email: string; password: string }>(
+    {
+      email: "",
+      password: "",
+    },
+  );
+
+  const navigate = useNavigate();
 
   async function onChange(token: string | null) {
     setNotARobot(true);
@@ -39,9 +51,31 @@ export function LoginForm({
     // }
   }
 
+  const OnSubmit = (e: SubmitEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const user = Users.find((pre) => pre.email === userCred.email);
+    if (!user) {
+      toast.error("User not found");
+      return;
+    }
+
+    if (user.password !== userCred.password) {
+      toast.error("invalid Credentials");
+      return;
+    }
+
+    localStorage.setItem("token", btoa(`${user.email}_${user.password}`));
+    localStorage.setItem(
+      "user",
+      btoa(JSON.stringify({ email: user.email, name: user.name })),
+    );
+    navigate("/");
+  };
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <form>
+      <form onSubmit={OnSubmit}>
         <FieldGroup>
           <div className="flex flex-col items-center gap-2 text-center">
             <a
@@ -61,9 +95,25 @@ export function LoginForm({
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
             <Input
+              value={userCred.email}
+              onChange={(e) =>
+                setUserCred((pre) => ({ ...pre, email: e.target.value }))
+              }
               id="email"
               type="email"
               placeholder="m@example.com"
+              required
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <PasswordInput
+              id="password"
+              value={userCred.password}
+              onChange={(e) =>
+                setUserCred((pre) => ({ ...pre, password: e.target.value }))
+              }
+              placeholder="********"
               required
             />
           </Field>
@@ -76,7 +126,9 @@ export function LoginForm({
             className="self-center"
           />
           <Field>
-            <Button type="submit" disabled={!notARobot}>Login</Button>
+            <Button type="submit" disabled={!notARobot}>
+              Login
+            </Button>
           </Field>
           {/* <FieldSeparator>Or</FieldSeparator>
           <Field className="grid gap-4 sm:grid-cols-2">
