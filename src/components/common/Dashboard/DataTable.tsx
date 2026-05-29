@@ -64,7 +64,7 @@ export function DataTable<TData, TValue>({
             <Input
               placeholder="Find the project..."
               value={""}
-              onChange={(event) => {}}
+              onChange={() => {}}
               className="rounded-none border-none focus-visible:ring-0"
             />
             <Search className="text-primary" />
