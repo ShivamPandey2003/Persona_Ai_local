@@ -1,21 +1,18 @@
 import { Logo } from "@/assets";
-import {
-  ShieldCheck,
-  Mail,
-  ArrowLeft,
-} from "lucide-react";
+import ScrollToTop from "@/hooks/ScrollToTop";
+import { ShieldCheck, Mail, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router";
 export default function PrivacyPolicyPage() {
-    const navigate = useNavigate()
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6">
+      <ScrollToTop />
       <div className="max-w-6xl mx-auto bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl">
-        
         {/* HEADER */}
         <header className="flex items-center justify-between px-8 py-7 border-b border-[#f1f1f1]">
           <div className="flex items-center gap-3">
             {/* <div className="w-20 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#6338F6]/30"> */}
-              <Logo size={55} />
+            <Logo size={55} />
             {/* </div> */}
             <div>
               <h1 className="text-sm font-semibold tracking-wide text-[#111827]">
@@ -26,7 +23,10 @@ export default function PrivacyPolicyPage() {
               </p>
             </div>
           </div>
-          <button className="px-5 h-11 rounded-2xl bg-[#F5F6FF] text-[#111827] font-medium hover:bg-[#EEF2FF] transition-all" onClick={()=>navigate('/')}>
+          <button
+            className="px-5 h-11 rounded-2xl bg-[#F5F6FF] text-[#111827] font-medium hover:bg-[#EEF2FF] transition-all"
+            onClick={() => navigate("/")}
+          >
             <span className="flex items-center gap-2">
               <ArrowLeft size={16} />
               Back
@@ -57,7 +57,6 @@ export default function PrivacyPolicyPage() {
         {/* CONTENT */}
         <section className="px-8 md:px-14 pb-14">
           <div className="grid grid-cols-1 gap-6">
-            
             {/* SECTION */}
             {[
               {
@@ -137,17 +136,13 @@ export default function PrivacyPolicyPage() {
                 </p>
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="bg-white rounded-[24px] p-6 border border-[#F1F1F1] shadow-sm">
-                    <p className="text-sm text-[#6B7280] mb-2">
-                      Company
-                    </p>
+                    <p className="text-sm text-[#6B7280] mb-2">Company</p>
                     <h4 className="text-lg font-semibold text-[#111827]">
                       PERSONA-AI
                     </h4>
                   </div>
                   <div className="bg-white rounded-[24px] p-6 border border-[#F1F1F1] shadow-sm">
-                    <p className="text-sm text-[#6B7280] mb-2">
-                      Email Support
-                    </p>
+                    <p className="text-sm text-[#6B7280] mb-2">Email Support</p>
                     <h4 className="text-lg font-semibold text-[#111827]">
                       support@persona.ai
                     </h4>
@@ -162,7 +157,7 @@ export default function PrivacyPolicyPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
               {/* <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#6338F6] to-[#8B5CF6] flex items-center justify-center text-white shadow-lg shadow-[#6338F6]/20"> */}
-                 <Logo size={55} />
+              <Logo size={55} />
               {/* </div> */}
               <div>
                 <h4 className="text-sm font-semibold text-[#111827]">

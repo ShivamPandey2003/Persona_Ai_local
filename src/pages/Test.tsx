@@ -1,5 +1,6 @@
 import { Logo } from "@/assets";
 import ProfileDropDown from "@/components/global/ProfileDropDown";
+import ScrollToTop from "@/hooks/ScrollToTop";
 import {
   Sparkles,
   ArrowRight,
@@ -22,6 +23,7 @@ export default function PersonaAILandingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6">
+      <ScrollToTop />
       <div className="max-w-7xl mx-auto bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl">
         {/* HEADER */}
         <header className="flex items-center justify-between px-8 py-7 border-b border-[#f1f1f1]">

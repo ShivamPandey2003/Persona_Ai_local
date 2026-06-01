@@ -34,6 +34,7 @@ export function DataTable<TData, TValue>({
   data,
 }: DataTableProps<TData, TValue>) {
   const [content, setContent] = useState<"Table" | "Card">("Table");
+  const [globalFilter, setGlobalFilter] = useState("");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: 10,
@@ -49,7 +50,6 @@ export function DataTable<TData, TValue>({
     state: {
       pagination,
     },
-
     onPaginationChange: setPagination,
   });
 
@@ -57,131 +57,156 @@ export function DataTable<TData, TValue>({
     <Tabs
       value={content}
       onValueChange={(e: string) => setContent(e as "Table" | "Card")}
+      className="w-full space-y-6"
     >
-      <div className={cn("h-full max-h-full")}>
-        <div className="flex flex-col-reverse md:flex-row items-end md:items-center justify-between mb-2 gap-2">
-          <div className="w-full md:w-1/4 border flex items-center pr-2 bg-white">
-            <Input
-              placeholder="Find the project..."
-              value={""}
-              onChange={() => {}}
-              className="rounded-none border-none focus-visible:ring-0"
-            />
-            <Search className="text-primary" />
-          </div>
-          <div className="flex items-center gap-2">
-            <CreateProjectDailog />
-              {content === "Table" && <ColumnDropdown table={table} />}
-              <TabsList>
-                <TabsTrigger value="Table">
-                  <TableIcon />
-                  <span>Table</span>
-                </TabsTrigger>
-                <TabsTrigger value="Card">
-                  <LayoutGrid />
-                  <span>Card</span>
-                </TabsTrigger>
-              </TabsList>
-          </div>
+      {/* HEADER CONTROLS BAR */}
+      <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        {/* Search Input styled to match landing form boxes */}
+        <div className="relative flex-1 max-w-md flex items-center bg-white rounded-lg border border-[#ECECEC] px-4 shadow-sm focus-within:border-[#6338F6]/50 transition-all">
+          <Search size={18} className="text-[#6B7280] mr-2" />
+          <Input
+            placeholder="Find the project..."
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="h-10 border-none rounded-none focus-visible:ring-0 px-0 bg-transparent text-[#111827]"
+          />
         </div>
-        <TabsContent value="Table">
-          <div className="overflow-hidden rounded-md border mb-2">
-            <Table>
-              <TableHeader className="bg-muted">
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
-                      return (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </TableHead>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() && "selected"}
+
+        {/* Action Buttons Cluster */}
+        <div className="flex items-center justify-end gap-3">
+          <CreateProjectDailog />
+          {content === "Table" && <ColumnDropdown table={table} />}
+          
+          <TabsList className="bg-[#F5F6FF] border border-[#E8ECFF] p-1 h-12 rounded-xl">
+            <TabsTrigger 
+              value="Table" 
+              className="rounded-lg gap-2 data-[state=active]:bg-white data-[state=active]:text-[#6338F6] data-[state=active]:shadow-sm text-[#4B5563]"
+            >
+              <TableIcon size={16} />
+              <span className="hidden md:inline">Table</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="Card" 
+              className="rounded-lg gap-2 data-[state=active]:bg-white data-[state=active]:text-[#6338F6] data-[state=active]:shadow-sm text-[#4B5563]"
+            >
+              <LayoutGrid size={16} />
+              <span className="hidden md:inline">Card</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
+      </div>
+
+      {/* VIEWPORT AREA */}
+      <TabsContent value="Table" className="mt-0 outline-none">
+        <div className="bg-white rounded-lg border border-white/60 shadow-[0_15px_50px_rgba(99,56,246,0.04)] overflow-hidden">
+          <Table>
+            <TableHeader className="bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] border-b border-[#F1F1F1]">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="hover:bg-transparent border-none">
+                  {headerGroup.headers.map((header) => (
+                    <TableHead 
+                      key={header.id} 
+                      className="h-14 text-xs font-semibold tracking-wider text-[#4B5563] uppercase first:pl-8 last:pr-8"
                     >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
                           )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No results.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-        <TabsContent value="Card">
-          <div className="overflow-hidden mb-2">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {table.getRowModel().rows.map((p) => (
-                <ProjectCard key={p.id} project={p.original as project} />
+                    </TableHead>
+                  ))}
+                </TableRow>
               ))}
-            </div>
-          </div>
-        </TabsContent>
-        <div className="flex items-center justify-center md:justify-end gap-4">
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                    className="border-b border-[#F1F1F1] last:border-none hover:bg-[#F8F9FF]/50 transition-colors"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell 
+                        key={cell.id} 
+                        className="py-4 text-sm text-[#111827] first:pl-8 last:pr-8"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-32 text-center text-[#6B7280]"
+                  >
+                    No projects found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </TabsContent>
+
+      <TabsContent value="Card" className="mt-0 outline-none">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {table.getRowModel().rows.map((p) => (
+            <ProjectCard key={p.id} project={p.original as any} />
+          ))}
+        </div>
+      </TabsContent>
+
+      {/* PAGINATION CONTROLS */}
+      <div className="flex items-center justify-between border-t border-[#F1F1F1] pt-4">
+        <div className="text-sm text-[#6B7280]">
+          {isMobile ? (
+            <span>Page {pagination.pageIndex + 1} of {table.getPageCount()}</span>
+          ) : (
+            <span>Showing {data.length} strategic projects</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
           <Button
-            size={"sm"}
+            variant="outline"
+            size="sm"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-            className="w-20"
+            className="rounded-lg px-4 h-10 border-[#ECECEC] text-[#4B5563] hover:text-[#6338F6]"
           >
             Previous
           </Button>
 
           {!isMobile &&
-            Array.from(
-              { length: table.getPageCount() },
-              (_, i) => pagination.pageIndex + i,
-            ).map((num) => {
-              return (
-                <Button
-                  key={num}
-                  size={"sm"}
-                  variant={pagination.pageIndex === num ? "default" : "outline"}
-                >
-                  {num + 1}
-                </Button>
-              );
-            })}
-
-          {isMobile && (
-            <span className="text-sm">
-              Page {pagination.pageIndex + 1} of {table.getPageCount()}
-            </span>
-          )}
+            Array.from({ length: table.getPageCount() }, (_, i) => pagination.pageIndex + i).map((num) => (
+              <Button
+                key={num}
+                size="sm"
+                variant={pagination.pageIndex === num ? "default" : "outline"}
+                className={cn(
+                  "w-10 h-10 rounded-lg font-medium transition-all",
+                  pagination.pageIndex === num
+                    ? "bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white shadow-md shadow-[#6338F6]/10"
+                    : "border-[#ECECEC] text-[#4B5563] hover:bg-[#F5F6FF]"
+                )}
+              >
+                {num + 1}
+              </Button>
+            ))}
 
           <Button
-            size={"sm"}
+            variant="outline"
+            size="sm"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-            className="w-20"
+            className="rounded-lg px-4 h-10 border-[#ECECEC] text-[#4B5563] hover:text-[#6338F6]"
           >
             Next
           </Button>
