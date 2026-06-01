@@ -47,7 +47,7 @@ export default function PersonaAILoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6 flex items-center justify-center">
       <div className="w-full max-w-7xl bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl grid grid-cols-1 lg:grid-cols-2">
         {/* LEFT SECTION */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#5f6fff] to-[#7b89ff] p-10 md:p-16 flex flex-col justify-between min-h-[850px]">
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#5f6fff] to-[#7b89ff] p-10 md:p-8 flex flex-col justify-between">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.35),transparent_40%)]" />
 
           {/* HEADER */}
@@ -121,7 +121,7 @@ export default function PersonaAILoginPage() {
           </div>
 
           {/* FLOATING CARDS */}
-          <div className="relative z-10 hidden lg:flex gap-5 mt-10">
+          {/* <div className="relative z-10 hidden lg:flex gap-5 mt-10">
             {[1, 2, 3].map((item) => (
               <div
                 key={item}
@@ -136,11 +136,11 @@ export default function PersonaAILoginPage() {
                 <div className="h-9 rounded-2xl bg-white/20" />
               </div>
             ))}
-          </div>
+          </div> */}
         </div>
 
         {/* RIGHT SECTION */}
-        <div className="flex items-center justify-center p-8 md:p-16 bg-[#FCFCFF]">
+        <div className="flex justify-center p-8 md:p-8 bg-[#FCFCFF]">
           <div className="w-full max-w-md">
             {/* LOGIN CARD */}
             <div className="rounded-[32px] bg-white border border-[#F1F1F1] shadow-[0_20px_60px_rgba(99,56,246,0.08)] p-8 md:p-10">
@@ -246,7 +246,7 @@ export default function PersonaAILoginPage() {
                 </button>
 
                 {/* DIVIDER */}
-                <div className="relative py-2">
+                {/* <div className="relative py-2">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-[#ECECEC]" />
                   </div>
@@ -256,15 +256,15 @@ export default function PersonaAILoginPage() {
                       OR CONTINUE WITH
                     </span>
                   </div>
-                </div>
+                </div> */}
 
                 {/* GOOGLE BUTTON */}
-                <button
+                {/* <button
                   disabled
                   className="w-full h-14 rounded-2xl bg-white disabled:bg-white/30 border disabled:cursor-not-allowed border-[#ECECEC] hover:bg-[#F9FAFB] transition-all font-medium text-[#111827] shadow-sm"
                 >
                   Continue with Google
-                </button>
+                </button> */}
               </div>
 
               {/* FOOTER */}
@@ -279,9 +279,9 @@ export default function PersonaAILoginPage() {
             </div>
 
             {/* DISCLAIMER */}
-            <p className="text-center text-sm text-[#9CA3AF] leading-6 mt-8 px-4">
+            {/* <p className="text-center text-sm text-[#9CA3AF] leading-6 mt-4 px-4">
               AI predictions are for informational purposes only.
-            </p>
+            </p> */}
           </div>
         </div>
       </div>

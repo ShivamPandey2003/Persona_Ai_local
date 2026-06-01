@@ -42,7 +42,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar className="border-r-0" {...props}>
-      <SidebarHeader className="p-0 px-2">
+      <SidebarHeader className="p-0 px-2 bg-primary/10">
         <div className="flex h-14 shrink-0 items-center gap-2">
           <div className="">
             <Logo size={45} />
@@ -59,7 +59,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <span>Start Group Chat</span>
         </Button>
       </SidebarHeader>
-      <SidebarContent className="p-0">
+      <SidebarContent className="p-0 bg-primary/10">
         <SidebarGroup className="flex h-full min-h-0 flex-col">
           <SidebarGroupLabel>Recents</SidebarGroupLabel>
 
@@ -68,7 +68,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               {Chats.map((item) => {
                 return (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={item.id === id}>
+                    <SidebarMenuButton asChild isActive={item.id === id} className="data-active:bg-primary! data-active:text-white">
                       <Link to={`/chat/${item.id}`} state={{projectId:state.projectId}}>{item.title}</Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

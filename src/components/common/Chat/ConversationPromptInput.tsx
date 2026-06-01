@@ -34,8 +34,6 @@ function ConversationPromptInput() {
 
   const state = location.state as { projectId: string };
 
-  console.log(projects);
-
   const streamResponse = () => {
     if (isStreamingRef.current) return;
 
