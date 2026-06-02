@@ -1,9 +1,8 @@
-import { Logo } from "@/assets";
-import ProfileDropDown from "@/components/global/ProfileDropDown";
+import Footer from "@/components/global/Footer";
+import Header from "@/components/global/Header";
 import ScrollToTop from "@/hooks/ScrollToTop";
 import {
   Sparkles,
-  ArrowRight,
   Brain,
   Wand2,
   Layers3,
@@ -12,72 +11,15 @@ import {
   LineChart,
   ShieldCheck,
   MessagesSquare,
-  Settings,
-  LayoutDashboard,
 } from "lucide-react";
-import { useNavigate } from "react-router";
 
 export default function PersonaAILandingPage() {
-  const navigate = useNavigate();
-  const LoggedIn = localStorage.getItem("token");
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6">
       <ScrollToTop />
       <div className="max-w-7xl mx-auto bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl">
         {/* HEADER */}
-        <header className="flex items-center justify-between px-8 py-7 border-b border-[#f1f1f1]">
-          <div className="flex items-center gap-3">
-            {/* <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#6338F6] to-[#8B5CF6] flex items-center justify-center text-white font-bold shadow-lg shadow-[#6338F6]/30"> */}
-            <Logo size={55} />
-            {/* </div> */}
-
-            <h1 className="text-sm font-semibold tracking-wide text-[#111827]">
-              PERSONA-AI
-            </h1>
-          </div>
-
-          {LoggedIn && <nav className="hidden md:flex items-center gap-10 text-sm text-[#4B5563]">
-            <button className="px-4 py-2 rounded-xl bg-[#F5F6FF] text-[#111827] shadow-sm">
-              Home
-            </button>
-
-            <button className="hover:text-[#6338F6] transition-all" onClick={()=>navigate('/dashboard')}>
-              <div className="flex items-center gap-2">
-                <LayoutDashboard size={16} />
-                Dashboard
-              </div>
-            </button>
-
-            <button className="hover:text-[#6338F6] transition-all" onClick={()=>navigate('/')}>
-              <div className="flex items-center gap-2">
-                <MessagesSquare size={16} />
-                Chat
-              </div>
-            </button>
-
-            <button className="hover:text-[#6338F6] transition-all" onClick={()=>navigate('/settings')}>
-              <div className="flex items-center gap-2">
-                <Settings size={16} />
-                Settings
-              </div>
-            </button>
-          </nav>}
-
-          {!LoggedIn ? (
-            <button
-              onClick={() => navigate("/login")}
-              className="px-6 h-12 rounded-2xl bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white font-medium shadow-[0_15px_35px_rgba(99,56,246,0.35)] hover:scale-105 transition-all duration-300"
-            >
-              <span className="flex items-center gap-2">
-                Get Started <ArrowRight size={18} />
-              </span>
-            </button>
-          ) : (
-            <ProfileDropDown />
-          )}
-        </header>
-
+          <Header/>
         {/* HERO */}
         <section className="px-8 md:px-14 pt-10 pb-14">
           <p className="text-[#6B7280] mb-4">Future Intelligence Platform 👋</p>
@@ -346,45 +288,7 @@ export default function PersonaAILandingPage() {
         </section>
 
         {/* FOOTER */}
-        <footer className="border-t border-[#F1F1F1] px-8 md:px-14 py-8 bg-white">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            {/* LEFT */}
-            <div className="flex items-center gap-3">
-              {/* <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#6338F6] to-[#8B5CF6] flex items-center justify-center text-white shadow-lg shadow-[#6338F6]/20"> */}
-              <Logo size={55} />
-              {/* </div> */}
-
-              <div>
-                <h4 className="text-sm font-semibold text-[#111827]">
-                  PERSONA-AI
-                </h4>
-
-                <p className="text-xs text-[#6B7280] mt-1">
-                  Multi-Persona AI for Strategic Future Planning
-                </p>
-              </div>
-            </div>
-
-            {/* CENTER */}
-            <div className="flex items-center gap-8 text-sm text-[#6B7280]">
-              <button
-                className="hover:text-[#6338F6] transition-all"
-                onClick={() => navigate("/privacy-policy")}
-              >
-                Privacy Policy
-              </button>
-
-              {/* <button className="hover:text-[#6338F6] transition-all">
-                Contact Us
-              </button> */}
-            </div>
-
-            {/* RIGHT */}
-            <div className="text-sm text-[#9CA3AF] text-center md:text-right max-w-md leading-6">
-              AI predictions are for informational purposes only.
-            </div>
-          </div>
-        </footer>
+        <Footer/>
       </div>
     </div>
   );

@@ -28,14 +28,15 @@ const Router = createBrowserRouter([
   // },
   {
     path: "/chat",
+    element: <ProtectedRoute element={<Rootlayout />} />,
     children: [
       {
         index: true,
-        element: <ProtectedRoute element={<ChatPage />} />,
+        element: <ChatPage />,
       },
       {
         path: ":id",
-        element: <ProtectedRoute element={<ChatPage />} />,
+        element: <ChatPage />,
       },
     ],
   },

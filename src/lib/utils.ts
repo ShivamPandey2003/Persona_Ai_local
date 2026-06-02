@@ -26,3 +26,16 @@ export function getInitials(name?: string): string {
 
   return "NA";
 }
+
+export function GetHtmlTitle(html: string) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+
+  const heading = div.querySelector("h1,h2,h3");
+
+  return (
+    heading?.textContent?.trim() ||
+    div.textContent?.trim() ||
+    "Untitled Chat"
+  );
+}

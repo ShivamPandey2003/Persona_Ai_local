@@ -1,31 +1,47 @@
-import { Button } from "@/components/ui/button"
-import { Message, MessageAction, MessageActions, MessageContent } from "@/components/ui/message"
-import { cn } from "@/lib/utils"
-import { Copy } from "lucide-react"
-import { memo } from "react"
+import { Button } from "@/components/ui/button";
+import {
+  Message,
+  MessageAction,
+  MessageActions,
+  MessageContent,
+} from "@/components/ui/message";
+import { cn } from "@/lib/utils";
+import { Copy } from "lucide-react";
+import { memo, useState } from "react";
+import { FileUploader } from "./fileUploader";
 
 type MessageComponentProps = {
-  message: any
-  isLastMessage: boolean
-  isStreaming?:boolean
-}
+  message: any;
+  isLastMessage: boolean;
+  isFirstMessage: boolean;
+  isStreaming?: boolean;
+  handleSubmit: (p:string)=>void
+};
 
 export const MessageComponent = memo(
-  ({ message, isLastMessage, isStreaming }: MessageComponentProps) => {
-    const isAssistant = message.role === "assistant"
+  ({
+    message,
+    isLastMessage,
+    isStreaming,
+    isFirstMessage,
+    handleSubmit
+  }: MessageComponentProps) => {
+    const [files, setFiles] = useState<File[]>([]);
+    const isAssistant = message.role === "assistant";
 
     return (
       <Message
         className={cn(
           "mx-auto flex w-full max-w-3xl flex-col gap-2 px-2 md:px-10",
-          isAssistant ? "items-start" : "items-end"
+          isAssistant ? "items-start" : "items-end",
         )}
       >
         {isAssistant ? (
           <div className="group flex w-full flex-col gap-0">
             <MessageContent
               className="text-foreground prose w-full min-w-0 flex-1 rounded-lg bg-transparent p-0"
-              markdown
+              html={message.type === "HTML"}
+              markdown={message.type === "TEXT"}
             >
               {message.content}
             </MessageContent>
@@ -33,7 +49,7 @@ export const MessageComponent = memo(
               className={cn(
                 "-ml-2.5 flex",
                 isStreaming && "hidden",
-                isLastMessage && "opacity-100"
+                isLastMessage && "opacity-100",
               )}
             >
               <MessageAction tooltip="Copy" delayDuration={100}>
@@ -42,6 +58,10 @@ export const MessageComponent = memo(
                 </Button>
               </MessageAction>
             </MessageActions>
+            {isFirstMessage && (
+              <FileUploader files={files} setFiles={setFiles} onSubmit={handleSubmit} />
+              
+            )}
           </div>
         ) : (
           <div className="group flex w-full flex-col items-end gap-1">
@@ -50,7 +70,7 @@ export const MessageComponent = memo(
             </MessageContent>
             <MessageActions
               className={cn(
-                "flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                "flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
               )}
             >
               <MessageAction tooltip="Copy" delayDuration={100}>
@@ -62,8 +82,8 @@ export const MessageComponent = memo(
           </div>
         )}
       </Message>
-    )
-  }
-)
+    );
+  },
+);
 
-MessageComponent.displayName = "MessageComponent"
+MessageComponent.displayName = "MessageComponent";
