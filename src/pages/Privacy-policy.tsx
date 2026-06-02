@@ -1,38 +1,14 @@
-import { Logo } from "@/assets";
+import Footer from "@/components/global/Footer";
+import Header from "@/components/global/Header";
 import ScrollToTop from "@/hooks/ScrollToTop";
-import { ShieldCheck, Mail, ArrowLeft } from "lucide-react";
-import { useNavigate } from "react-router";
+import { ShieldCheck, Mail } from "lucide-react";
 export default function PrivacyPolicyPage() {
-  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6">
       <ScrollToTop />
       <div className="max-w-6xl mx-auto bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl">
         {/* HEADER */}
-        <header className="flex items-center justify-between px-8 py-7 border-b border-[#f1f1f1]">
-          <div className="flex items-center gap-3">
-            {/* <div className="w-20 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#6338F6]/30"> */}
-            <Logo size={55} />
-            {/* </div> */}
-            <div>
-              <h1 className="text-sm font-semibold tracking-wide text-[#111827]">
-                PERSONA-AI
-              </h1>
-              <p className="text-xs text-[#6B7280]">
-                Privacy & Data Protection
-              </p>
-            </div>
-          </div>
-          <button
-            className="px-5 h-11 rounded-2xl bg-[#F5F6FF] text-[#111827] font-medium hover:bg-[#EEF2FF] transition-all"
-            onClick={() => navigate("/")}
-          >
-            <span className="flex items-center gap-2">
-              <ArrowLeft size={16} />
-              Back
-            </span>
-          </button>
-        </header>
+        <Header />
         {/* HERO */}
         <section className="px-8 md:px-14 pt-12 pb-8">
           <div className="rounded-[32px] overflow-hidden bg-gradient-to-br from-[#5f6fff] to-[#7b89ff] p-10 md:p-14 relative shadow-[0_20px_50px_rgba(99,56,246,0.18)]">
@@ -153,26 +129,7 @@ export default function PrivacyPolicyPage() {
           </div>
         </section>
         {/* FOOTER */}
-        <footer className="border-t border-[#F1F1F1] px-8 md:px-14 py-8 bg-white">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              {/* <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#6338F6] to-[#8B5CF6] flex items-center justify-center text-white shadow-lg shadow-[#6338F6]/20"> */}
-              <Logo size={55} />
-              {/* </div> */}
-              <div>
-                <h4 className="text-sm font-semibold text-[#111827]">
-                  PERSONA-AI
-                </h4>
-                <p className="text-xs text-[#6B7280] mt-1">
-                  Multi-Persona AI for Strategic Future Planning
-                </p>
-              </div>
-            </div>
-            <div className="text-sm text-[#9CA3AF] text-center md:text-right max-w-md leading-6">
-              AI predictions are for informational purposes only.
-            </div>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </div>
   );

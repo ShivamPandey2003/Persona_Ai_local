@@ -19,6 +19,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useParams } from "react-router";
 import { setPersonaDialog, setProjects } from "@/redux/ProjectSlice";
 import { PERSONA_DETAILS } from "@/data/DummyPersona";
+import { GetHtmlTitle } from "@/lib/utils";
 
 function ConversationPromptInput() {
   const { projects } = useSelector((state: RootState) => state.Project);
@@ -41,39 +42,78 @@ function ConversationPromptInput() {
       (m) => m.role === "assistant",
     ).length;
 
-    const fullResponse = SCRIPT[assistantCount]?.content;
+    const response = SCRIPT[assistantCount];
 
-    if (!fullResponse) {
-      return;
-    }
+    if (!response) return;
 
-    isStreamingRef.current = true;
-    setIsStreaming(true);
+    const fullResponse = response.content;
+    const isHtml = response.type === "HTML";
 
     const messageId = Date.now();
 
     dispatch(
-        setProjects(
-          projects.map((item) => {
-            if (item.id === state.projectId) {
-              return {
-                ...item,
-              };
-            }
+      setProjects(
+        projects.map((item) => {
+          if (item.id === state.projectId) {
+            return {
+              ...item,
+            };
+          }
 
-            return item;
-          }),
-        ),
-      );
+          return item;
+        }),
+      ),
+    );
 
+    // Create assistant message
     setMessages((prev) => [
       ...prev,
       {
         id: messageId,
         role: "assistant",
         content: "",
+        type: response.type,
       },
     ]);
+
+    // HTML messages should render immediately
+    if (isHtml) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                content: fullResponse,
+              }
+            : msg,
+        ),
+      );
+
+      if (response.createdAt) {
+        dispatch(
+          setProjects(
+            projects.map((item) => {
+              if (item.id === state.projectId) {
+                return {
+                  ...item,
+                  personas: PERSONA_DETAILS,
+                };
+              }
+
+              return item;
+            }),
+          ),
+        );
+
+        dispatch(setPersonaDialog(true));
+      }
+
+      return;
+    }
+
+    // Markdown/Text messages stream normally
+    isStreamingRef.current = true;
+    setIsStreaming(true);
 
     let charIndex = 0;
 
@@ -83,35 +123,42 @@ function ConversationPromptInput() {
 
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === messageId ? { ...msg, content: currentContent } : msg,
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  content: currentContent,
+                }
+              : msg,
           ),
         );
 
         charIndex++;
       } else {
         clearInterval(streamIntervalRef.current!);
+
         isStreamingRef.current = false;
         setIsStreaming(false);
+
+        if (response.createdAt) {
+          dispatch(
+            setProjects(
+              projects.map((item) => {
+                if (item.id === state.projectId) {
+                  return {
+                    ...item,
+                    personas: PERSONA_DETAILS,
+                  };
+                }
+
+                return item;
+              }),
+            ),
+          );
+
+          dispatch(setPersonaDialog(true));
+        }
       }
     }, 30);
-
-    if (SCRIPT[assistantCount].createdAt) {
-      dispatch(
-        setProjects(
-          projects.map((item) => {
-            if (item.id === state.projectId) {
-              return {
-                ...item,
-                personas: PERSONA_DETAILS,
-              };
-            }
-
-            return item;
-          }),
-        ),
-      );
-      dispatch(setPersonaDialog(true));
-    }
   };
 
   useEffect(() => {
@@ -119,7 +166,7 @@ function ConversationPromptInput() {
 
     const project = projects.find((pre) => pre.id === state?.projectId);
 
-    if (project && project.files.length > 0 && project.personas.length === 0) {
+    if (project && project.personas.length === 0) {
       hasStreamedRef.current = true;
       streamResponse();
     }
@@ -149,7 +196,10 @@ function ConversationPromptInput() {
                 chats: [
                   {
                     id: id,
-                    title: message.content.split(" ").slice(0, 4).join(" "),
+                    title:
+                      message.type === "HTML"
+                        ? GetHtmlTitle(message.content).split(" ").slice(0, 4).join(" ")
+                        : message.content.split(" ").slice(0, 4).join(" "),
                     description: message.content
                       .split(" ")
                       .slice(0, 12)
@@ -186,17 +236,30 @@ function ConversationPromptInput() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-56px)] flex-col overflow-hidden">
+    <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden">
       <ChatContainerRoot className="relative flex-1 space-y-0 overflow-y-auto">
         <ChatContainerContent className="space-y-12 px-4 py-12">
           {messages.map((message, index) => {
             const isLastMessage = index === messages.length - 1;
+            const isFirstMessage = index === 0;
 
             return (
               <MessageComponent
+                handleSubmit={(p: string) => {
+                  setMessages((pre) => [
+                    ...pre,
+                    {
+                      id: 1222,
+                      role: "user",
+                      content: p,
+                    },
+                  ]);
+                  streamResponse();
+                }}
                 key={message.id}
                 message={message}
                 isLastMessage={isLastMessage}
+                isFirstMessage={isFirstMessage}
               />
             );
           })}
@@ -207,7 +270,7 @@ function ConversationPromptInput() {
           )}
         </ChatContainerContent>
       </ChatContainerRoot>
-      <div className="inset-x-0 bottom-0 mx-auto w-full max-w-3xl shrink-0 px-3 pb-3 md:px-5 md:pb-5">
+      <div className="inset-x-0 bottom-0 mx-auto w-full max-w-3xl shrink-0 px-3 pb-3 md:px-5">
         <PromptInput
           isLoading={isStreaming}
           value={input}

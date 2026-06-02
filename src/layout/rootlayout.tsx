@@ -7,8 +7,8 @@ const Rootlayout = () => {
 
   // Dynamically extract a clean title string based on path routing
   const getPageTitle = () => {
-    if (pathname.includes("dashboard")) return "Dashboard Overview";
-    if (pathname.includes("settings")) return "Account Settings";
+    if (pathname.includes("dashboard")) return "Dashboard";
+    if (pathname.includes("settings")) return "Settings";
     return "Persona Space";
   };
 
@@ -22,11 +22,9 @@ const Rootlayout = () => {
       } as React.CSSProperties}
     >
       <div className="flex min-h-screen w-full bg-white font-sans">
-        {/* Unified Application Sidebar */}
         <NewAppSidebar />
         
         <SidebarInset className="bg-white flex-1 flex flex-col min-w-0 max-h-screen overflow-hidden">
-          {/* TOP INTERACTIVE ACTION HEADER BAR (Matches chat view look perfectly) */}
           <header className="h-14 border-b border-[#F1F1F1] px-6 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
