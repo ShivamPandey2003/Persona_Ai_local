@@ -1,3 +1,4 @@
+import { getProjectList } from "@/api/Projects/query";
 import Column from "@/components/common/Dashboard/Column";
 // import CreateProjectDailog from "@/components/common/Dashboard/CreateProjectDailog";
 import { DataTable } from "@/components/common/Dashboard/DataTable";
@@ -8,12 +9,13 @@ import type { RootState } from "@/redux/store";
 import { useSelector } from "react-redux";
 
 const DashboardPage = () => {
+  const { data, isPending, error } = getProjectList();
 
-  const {projects} = useSelector((state:RootState)=>state.Project)
+
 
   return (
     <div className="w-full max-w-6xl mx-auto py-6">
-      <DataTable columns={Column} data={[...projects]} />
+      <DataTable columns={Column} data={data?.response.projects || []} />
     </div>
   );
 };

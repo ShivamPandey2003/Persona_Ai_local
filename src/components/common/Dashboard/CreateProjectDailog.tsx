@@ -12,22 +12,24 @@ import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Label } from "@/components/ui/label";
-import { CreateProject, type CreateProjectForm } from "@/schemas/Project";
+import {
+  CreateProject as CreateProjectT,
+  type CreateProjectForm,
+} from "@/schemas/Project";
 import { Plus } from "lucide-react";
 import React from "react";
 import { Roles } from "@/data/roles";
 import RoleCard from "./RoleCard";
-import { useDispatch } from "react-redux";
-import type { AppDispatch } from "@/redux/store";
-import { setProjects } from "@/redux/ProjectSlice";
-import { formatCurrentDate } from "@/data/DummyFunc";
-import { useNavigate } from "react-router";
+// import { useDispatch } from "react-redux";
+// import type { AppDispatch } from "@/redux/store";
+// import { setProjects } from "@/redux/ProjectSlice";
+// import { formatCurrentDate } from "@/data/DummyFunc";
+// import { useNavigate } from "react-router";
+import { CreateProject } from "@/api/Projects/mutation";
 
 const CreateProjectDailog = () => {
   const [open, setOpen] = React.useState<boolean>(false);
-  const dispatch = useDispatch<AppDispatch>();
- const navigate = useNavigate()
- const uuid = crypto.randomUUID();
+  const { mutate } = CreateProject(() => setOpen(false));
 
   const {
     register,
@@ -36,33 +38,17 @@ const CreateProjectDailog = () => {
     watch,
     setValue,
   } = useForm<CreateProjectForm>({
-    resolver: zodResolver(CreateProject),
-    defaultValues:{
-      title:"",
-      role:"brand-representative"
-    }
+    resolver: zodResolver(CreateProjectT),
+    defaultValues: {
+      project_name: "",
+      project_type: "brand_representative",
+    },
   });
 
-  const selectedRole = watch("role");
+  const selectedRole = watch("project_type");
 
   const onSubmit = (data: CreateProjectForm) => {
-    const id = Math.random()
-    dispatch(setProjects([{
-        id: `project-${id}`,
-        title: data.title,
-        description:"",
-        role:data.role,
-        files:[],
-        personas:[],
-        chats:[],
-        createdAt: formatCurrentDate()
-    }]))
-    navigate(`/chat/${uuid}`, {
-        state:{
-            projectId: `project-${id}`
-        }
-    })
-    setOpen(false);
+    mutate(data);
   };
 
   return (
@@ -90,13 +76,15 @@ const CreateProjectDailog = () => {
                     key={item.id}
                     role={item}
                     isSelected={selectedRole === item.id}
-                    setSelected={() => setValue("role", item.id)}
+                    setSelected={() => setValue("project_type", item.id)}
                   />
                 );
               })}
             </div>
-            {errors.role && (
-              <p className="text-sm text-red-500">{errors.role.message}</p>
+            {errors.project_type && (
+              <p className="text-sm text-red-500">
+                {errors.project_type.message}
+              </p>
             )}
           </div>
 
@@ -106,10 +94,27 @@ const CreateProjectDailog = () => {
               <Input
                 id="title"
                 placeholder="e.g. EverSip Persona Study"
-                {...register("title")}
+                {...register("project_name")}
               />
-              {errors.title && (
-                <p className="text-sm text-red-500">{errors.title.message}</p>
+              {errors.project_name && (
+                <p className="text-sm text-red-500">
+                  {errors.project_name.message}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="grid gap-4 py-2 md:py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Project Description</Label>
+              <Input
+                id="title"
+                placeholder="e.g. EverSip Persona Study is about..."
+                {...register("description")}
+              />
+              {errors.description && (
+                <p className="text-sm text-red-500">
+                  {errors.description.message}
+                </p>
               )}
             </div>
           </div>

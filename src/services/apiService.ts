@@ -25,7 +25,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
     (response) => {
         // You can access headers here
-        const token = response.headers['access-token'];
+        const token = response.headers['authorization'];
         if(token){
           localStorage.setItem('token', token)
         }

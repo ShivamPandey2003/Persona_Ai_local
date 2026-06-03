@@ -1,8 +1,10 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import ProjectReducer from './ProjectSlice'
+import GlobalModalReducer from './GlobalModalSlice'
 
 const rootReducer = combineReducers({
-  Project: ProjectReducer
+  Project: ProjectReducer,
+  GlobalModal: GlobalModalReducer
 });
 
 

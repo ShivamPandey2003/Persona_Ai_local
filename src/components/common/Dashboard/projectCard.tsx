@@ -1,24 +1,25 @@
+import type { Project } from "@/api/Projects/query";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowRight, Calendar, FileText, Users } from "lucide-react";
+import { ArrowRight, FileText, Users } from "lucide-react";
 import { memo } from "react";
 import { Link } from "react-router";
 
-const ProjectCard = ({ project }: { project: project }) => {
-  const fileCount = project.files.length;
-  const personaCount = project.personas.length;
+const ProjectCard = ({ project }: { project: Project }) => {
+  const fileCount = project.total_files_count;
+  const personaCount = project.total_personas_count;
   return (
     <article className="group relative flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg">
       <header className="space-y-1">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Calendar className="h-3.5 w-3.5" />
-          <span>{project.createdAt}</span>
+          {/* <Calendar className="h-3.5 w-3.5" /> */}
+          <span>{project.status}</span>
         </div>
         <h3 className="text-lg font-semibold tracking-tight text-foreground">
-          {project.title}
+          {project.project_name}
         </h3>
       </header>
       <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
-        {project.description}
+        {project.project_type}
       </p>
       <div className="flex items-center gap-2 pt-1">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 text-xs font-medium text-foreground">

@@ -2,7 +2,7 @@ import { Briefcase, Building2 } from "lucide-react";
 
 export const Roles = [
   {
-    id: "brand-representative" as const,
+    id: "brand_representative" as const,
     title: "Brand Representative",
     description:
       "You represent a brand or company and want to create AI personas based on your consumer research data to gain strategic insights.",
