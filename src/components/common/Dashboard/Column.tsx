@@ -3,10 +3,11 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { File, Users } from "lucide-react";
 import { Dropdown } from "./DropDown";
 import { Link } from "react-router";
+import type { Project } from "@/api/Projects/query";
 
-const columnHelper = createColumnHelper<project>();
+const columnHelper = createColumnHelper<Project>();
 
-const Column: ColumnDef<project, any>[] = [
+const Column: ColumnDef<Project, any>[] = [
   // {
   //   id: "Select",
   //   header: () => {
@@ -16,10 +17,10 @@ const Column: ColumnDef<project, any>[] = [
   //     return <Checkbox />;
   //   },
   // },
-  columnHelper.accessor("title", {
+  columnHelper.accessor("project_name", {
     header: "Project Title",
     cell: ({ row, getValue }) => {
-      const ProjectId = row.original.id;
+      const ProjectId = row.original.project_id;
       return (
         <Link to={'/chat'} state={{projectId:ProjectId}}>
         <div className="w-full cursor-pointer py-1">
@@ -29,11 +30,11 @@ const Column: ColumnDef<project, any>[] = [
       );
     },
   }),
-  columnHelper.accessor("description", {
+  columnHelper.accessor("project_type", {
     header:  () => {
       return (
         <div className="w-full max-w-[20rem]">
-          Description
+          Type
         </div>
       );
     },
@@ -45,7 +46,7 @@ const Column: ColumnDef<project, any>[] = [
       );
     },
   }),
-  columnHelper.accessor("files", {
+  columnHelper.accessor("total_files_count", {
     header: () => {
       return (
         <div className="flex items-center justify-center gap-1">
@@ -57,12 +58,12 @@ const Column: ColumnDef<project, any>[] = [
     cell: ({ getValue }) => {
       return (
         <div onClick={() => {}} className="w-full cursor-pointer py-1 text-center">
-          {getValue().length}
+          {getValue()}
         </div>
       );
     },
   }),
-  columnHelper.accessor("personas", {
+  columnHelper.accessor("total_personas_count", {
     header: () => {
       return (
         <div className="flex items-center justify-center gap-2">
@@ -74,16 +75,16 @@ const Column: ColumnDef<project, any>[] = [
     cell: ({ getValue }) => {
       return (
         <div onClick={() => {}} className="w-full cursor-pointer py-1 text-center">
-          {getValue().length}
+          {getValue()}
         </div>
       );
     },
   }),
-  columnHelper.accessor("createdAt", {
+  columnHelper.accessor("status", {
     header:  () => {
       return (
         <div className="text-center">
-          Created At
+          Status
         </div>
       );
     },
@@ -98,10 +99,10 @@ const Column: ColumnDef<project, any>[] = [
   {
      id: "Actions",
      header:"Actions",
-     cell:()=>{
-        // const ProjectId = row.original.id;
+     cell:({row})=>{
+        const ProjectId = row.original.project_id;
         return (
-            <Dropdown/>
+            <Dropdown selectedId={ProjectId}/>
         )
      }
   }

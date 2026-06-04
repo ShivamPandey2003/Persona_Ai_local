@@ -22,8 +22,9 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useNavigate } from "react-router";
+// import { useNavigate } from "react-router";
 import { cn, getInitials } from "@/lib/utils";
+import { Logout } from "@/api/Auth/mutation";
 
 export function NavUser() {
   const { isMobile, state } = useSidebar();
@@ -31,14 +32,9 @@ export function NavUser() {
 
   const encryptUser = localStorage.getItem("user");
   const dycryptUser = atob(encryptUser || "");
-  const User: { name: string; email: string } = JSON.parse(dycryptUser);
+  const User: { firstName: string; lastName: string; token:string } = JSON.parse(dycryptUser);
 
-  const navigate = useNavigate();
-
-  const onLogout = () => {
-    localStorage.clear();
-    navigate("/");
-  };
+  const {mutate} = Logout()
 
   return (
     <SidebarMenu className={cn(isCollapsed && "items-center")}>
@@ -50,10 +46,10 @@ export function NavUser() {
               className={cn("data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground md:h-8 md:p-0")}
             >
               <Avatar className="h-8 w-8 rounded-full">
-                <AvatarFallback className="rounded-full bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white">{getInitials(User.name)}</AvatarFallback>
+                <AvatarFallback className="rounded-full bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white">{getInitials(`${User.firstName} ${User.lastName}`)}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{User.name}</span>
+                <span className="truncate font-medium">{User.firstName} {User.lastName}</span>
                 {/* <span className="truncate text-xs">{User.email}</span> */}
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
@@ -68,16 +64,16 @@ export function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-full">
-                  <AvatarFallback className="rounded-full">{getInitials(User.name)}</AvatarFallback>
+                  <AvatarFallback className="rounded-full bg-linear-to-r from-[#6338F6] to-[#8B5CF6] text-white">{getInitials(`${User.firstName} ${User.lastName}`)}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{User.name}</span>
-                  <span className="truncate text-xs">{User.email}</span>
+                  <span className="truncate font-medium">{User.firstName} {User.lastName}</span>
+                  {/* <span className="truncate text-xs">{User.email}</span> */}
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={()=>onLogout()}>
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={()=>mutate()}>
               <LogOut />
               Log out
             </DropdownMenuItem>

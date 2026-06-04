@@ -9,6 +9,9 @@ lerna-debug.log*
 
 .env
 
+ConversationPromptInput.context.md
+k8-96.md
+
 node_modules
 dist
 dist-ssr

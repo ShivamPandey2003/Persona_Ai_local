@@ -156,7 +156,7 @@ export function NewAppSidebar() {
             {Chats.length ? (
               <ScrollArea className="flex-1 overflow-hidden">
                 <SidebarMenu>
-                  {Chats.map((item) => {
+                  {Chats.map((item:any) => {
                     return (
                       <SidebarMenuItem key={item.title}>
                         <SidebarMenuButton

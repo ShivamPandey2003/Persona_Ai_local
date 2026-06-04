@@ -65,7 +65,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           <ScrollArea className="flex-1 overflow-hidden">
             <SidebarMenu>
-              {Chats.map((item) => {
+              {Chats.map((item:any) => {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={item.id === id} className="data-active:bg-primary! data-active:text-white">

@@ -7,9 +7,11 @@ import {
   Brain,
 } from "lucide-react";
 import { useState, type MouseEvent } from "react";
-import { useNavigate } from "react-router";
-import Users from "@/data/DummyUser.json";
-import { toast } from "sonner";
+// import { useNavigate } from "react-router";
+// import Users from "@/data/DummyUser.json";
+// import { toast } from "sonner";
+import { Login } from "@/api/Auth/mutation";
+import { aesEncrypt } from "@/lib/encryption&decryption";
 
 export default function PersonaAILoginPage() {
   const [userCred, setUserCred] = useState<{ email: string; password: string }>(
@@ -18,30 +20,21 @@ export default function PersonaAILoginPage() {
       password: "",
     },
   );
+  const {mutate, data} = Login();
 
-  const navigate = useNavigate();
 
   const OnSubmit = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
 
-    const user = Users.find((pre) => pre.email === userCred.email);
-    if (!user) {
-      toast.error("User not found");
-      return;
+    const payload = {
+      email: aesEncrypt(userCred.email),
+      password: aesEncrypt(userCred.password)
     }
 
-    if (user.password !== userCred.password) {
-      toast.error("invalid Credentials");
-      return;
-    }
-
-    localStorage.setItem("token", btoa(`${user.email}_${user.password}`));
-    localStorage.setItem(
-      "user",
-      btoa(JSON.stringify({ email: user.email, name: user.name })),
-    );
-    navigate("/dashboard");
+    mutate(payload)
   };
+
+  console.log(data)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6 flex items-center justify-center">
