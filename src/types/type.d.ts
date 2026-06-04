@@ -16,3 +16,15 @@ declare type ResponseHeader = {
   code: number;
   message: string;
 };
+
+declare type PersonaProgressT = {
+    persona_number: number
+    completion: number
+}
+
+declare type MessageT = {
+    id: string;
+    message: string;
+    userType: "User" | "Assistant"
+    persona_progress?: PersonaProgressT
+}

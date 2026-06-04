@@ -4,17 +4,17 @@ import Column from "@/components/common/Dashboard/Column";
 import { DataTable } from "@/components/common/Dashboard/DataTable";
 // import { Button } from "@/components/ui/button";
 // import ProjectData from "@/data/ProjectDummyData.json";
-import type { RootState } from "@/redux/store";
+// import type { RootState } from "@/redux/store";
 // import { Trash2 } from "lucide-react";
-import { useSelector } from "react-redux";
+// import { useSelector } from "react-redux";
 
 const DashboardPage = () => {
-  const { data, isPending, error } = getProjectList();
+  const { data } = getProjectList();
 
 
 
   return (
-    <div className="w-full max-w-6xl mx-auto py-6">
+    <div className="w-full max-w-6xl mx-auto py-6 p-4 md:p-4">
       <DataTable columns={Column} data={data?.response.projects || []} />
     </div>
   );

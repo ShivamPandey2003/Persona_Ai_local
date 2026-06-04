@@ -21,7 +21,6 @@ type CreateProjectRes = {
 
 export const CreateProject = (cb:()=>void) => {
   const navigate = useNavigate();
-  const uuid = crypto.randomUUID();
   const createProject = useMutation<
     CreateProjectRes,
     Record<string, any>,
@@ -43,7 +42,7 @@ export const CreateProject = (cb:()=>void) => {
       return data.response;
     },
     onSuccess: (response) => {
-      navigate(`/chat/${uuid}`, {
+      navigate(`/chat`, {
         state: {
           projectId: response.response.project_id,
         },

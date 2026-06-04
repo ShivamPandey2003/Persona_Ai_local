@@ -7,7 +7,7 @@ import {
   Brain,
 } from "lucide-react";
 import { useState, type MouseEvent } from "react";
-import { useNavigate } from "react-router";
+// import { useNavigate } from "react-router";
 // import Users from "@/data/DummyUser.json";
 // import { toast } from "sonner";
 import { Login } from "@/api/Auth/mutation";
@@ -20,9 +20,8 @@ export default function PersonaAILoginPage() {
       password: "",
     },
   );
-  const {mutate, isPending, error, data} = Login();
+  const {mutate, data} = Login();
 
-  const navigate = useNavigate();
 
   const OnSubmit = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();

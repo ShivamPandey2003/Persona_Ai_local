@@ -91,7 +91,7 @@ const PersonaDialog = ({ open, setOpen }: Prop) => {
         <ScrollArea className="h-[450px]">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 items-start">
         {
-           Project?.personas.map((item, i)=>{
+           Project?.personas.map((item:any, i:any)=>{
                 return <PersonaResultCard key={i} persona={item} id={state.projectId}/>
             })
         }

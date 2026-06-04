@@ -35,10 +35,8 @@ const Rootlayout = () => {
           </header>
 
           {/* MAIN INTERNAL VIEWPORT BODY ROUTE PANEL */}
-          <main className="flex-1 overflow-y-auto p-4 md:p-4 bg-white">
-            <div className="max-w-6xl mx-auto w-full">
+          <main className="flex-1 overflow-y-auto bg-white">
               <Outlet />
-            </div>
           </main>
         </SidebarInset>
       </div>

@@ -34,7 +34,7 @@ export function NavUser() {
   const dycryptUser = atob(encryptUser || "");
   const User: { firstName: string; lastName: string; token:string } = JSON.parse(dycryptUser);
 
-  const {mutate, isPending, isError} = Logout()
+  const {mutate} = Logout()
 
   return (
     <SidebarMenu className={cn(isCollapsed && "items-center")}>

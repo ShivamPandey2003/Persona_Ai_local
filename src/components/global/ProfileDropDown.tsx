@@ -18,7 +18,7 @@ const ProfileDropDown = () => {
 
   const navigate = useNavigate()
 
-  const {mutate, isPending, isError} = Logout()
+  const {mutate} = Logout()
 
   return (
     <DropdownMenu>

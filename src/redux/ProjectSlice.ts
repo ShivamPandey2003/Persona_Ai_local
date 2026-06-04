@@ -1,7 +1,7 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 type initialStateType = {
-    projects:project[]
+    projects:any[]
     personaDialog: boolean
 }
 
@@ -14,7 +14,7 @@ const ProjectSlice = createSlice({
     name:"ProjectSlice",
     initialState,
     reducers:{
-        setProjects: (state, action:PayloadAction<project[]>)=>{
+        setProjects: (state, action:PayloadAction<any[]>)=>{
             state.projects = action.payload
         },
         setPersonaDialog:(state, action:PayloadAction<boolean>)=>{
