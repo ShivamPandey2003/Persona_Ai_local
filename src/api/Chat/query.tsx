@@ -1,43 +1,42 @@
-import { apiRequest } from "@/services/apiService";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "react-router";
+import { getAuthToken, postApi } from "@/lib/api";
 
-type ChatStart = {
-  conversation_id: string;
-  first_message: string;
+type RawBuilderMessage = {
+  role: "assistant" | "user";
+  message: string;
 };
 
-type ChartStartRes = {
-  header: ResponseHeader;
-  response: ChatStart;
+type BuilderHistoryResponse = {
+  messages: RawBuilderMessage[];
 };
 
-type ChartStartPayload = {
-  token: string;
-  project_id: string;
-};
-
-export const ChatStart = () => {
-  const userStr = localStorage.getItem("user");
-  const userData = userStr ? JSON.parse(atob(userStr)) : null;
-  const token = userData?.token || "";
-  const { state } = useLocation();
-
-  const ChatStart = useQuery<ChartStartRes, Record<string, any>>({
-    queryKey: ["ChartStart"],
+/**
+ * POST /v1/persona/chat/history — rehydrate a persona-builder conversation.
+ *
+ * The opening assistant message created by /chat/start is part of the saved
+ * history, so a freshly started conversation already returns one message here.
+ */
+export const useBuilderChatHistory = (conversationId: string | undefined) => {
+  const token = getAuthToken();
+  return useQuery<MessageT[]>({
+    queryKey: ["BuilderChatHistory", conversationId],
     queryFn: async () => {
-      const payload: ChartStartPayload = {
-        token: token,
-        project_id: state.projectId,
-      };
-      const res = await apiRequest("post", "persona/chat/start", payload);
-
-      return res.response;
+      const data = await postApi<BuilderHistoryResponse>("persona/chat/history", {
+        token,
+        conversation_id: conversationId,
+      });
+      return (data.messages ?? []).map((m, i) => ({
+        id: `${conversationId}-h-${i}`,
+        message: m.message,
+        userType: m.role === "assistant" ? "Assistant" : "User",
+      }));
     },
-    retry: 1,
+    enabled: Boolean(token && conversationId),
     refetchOnWindowFocus: false,
-    enabled: !!token && !!state.projectId,
+    // The view seeds local state from history once per mount and then appends
+    // replies itself, so drop the cache on unmount to guarantee a reopened
+    // conversation re-fetches the full persisted transcript.
+    staleTime: 0,
+    gcTime: 0,
   });
-
-  return ChatStart;
 };

@@ -1,15 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -20,46 +16,122 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import {
-  Plus,
-  RotateCcw,
-  Save,
-  X,
-} from "lucide-react";
+import { CircularLoader } from "@/components/ui/loader";
+import { Plus, RotateCcw, Save, X } from "lucide-react";
+import { toast } from "sonner";
+
+import { useSettings } from "@/api/Settings/query";
+import { useSaveSettings, useResetSettings } from "@/api/Settings/mutation";
+
+/** Like AppSettings but with text fields kept as strings for inputs. */
+type SettingsForm = Omit<AppSettings, "industry" | "domain"> & {
+  industry: string;
+  domain: string;
+};
+
+const SCENARIO_MODES: { value: AppSettings["scenario_mode"]; label: string; description: string }[] = [
+  {
+    value: "optimistic",
+    label: "Optimistic",
+    description:
+      "Emphasizes growth opportunities, favorable market conditions, and potential upsides.",
+  },
+  {
+    value: "realistic",
+    label: "Realistic",
+    description:
+      "Balances opportunities and risks for a grounded, most-likely outlook.",
+  },
+  {
+    value: "pessimistic",
+    label: "Pessimistic",
+    description:
+      "Stresses risks, headwinds, and downside scenarios to pressure-test ideas.",
+  },
+];
+
+const TIME_HORIZONS: { value: AppSettings["time_horizon"]; label: string }[] = [
+  { value: "1_year", label: "1 Year" },
+  { value: "3_years", label: "3 Years" },
+  { value: "5_years", label: "5 Years" },
+  { value: "10_years", label: "10 Years" },
+];
+
+function toForm(s: AppSettings): SettingsForm {
+  return { ...s, industry: s.industry ?? "", domain: s.domain ?? "" };
+}
 
 export default function SettingsPage() {
-  const [assumptions, setAssumptions] = useState([
-    "Market conditions remain relatively stable",
-    "No major regulatory changes expected",
-  ]);
+  const { data: settings, isLoading, isError } = useSettings();
+  const saveMut = useSaveSettings();
+  const resetMut = useResetSettings();
 
+  const [form, setForm] = useState<SettingsForm | null>(null);
   const [newAssumption, setNewAssumption] = useState("");
 
-  const addAssumption = () => {
-    if (!newAssumption.trim()) return;
+  // Seed the form once settings load.
+  useEffect(() => {
+    if (settings && !form) setForm(toForm(settings));
+  }, [settings, form]);
 
-    setAssumptions((prev) => [...prev, newAssumption.trim()]);
+  if (isLoading || !form) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        {isError ? (
+          <p className="text-sm text-muted-foreground">
+            Couldn't load your settings. Please try again.
+          </p>
+        ) : (
+          <CircularLoader size="lg" />
+        )}
+      </div>
+    );
+  }
+
+  const isDirty =
+    !!settings && JSON.stringify(form) !== JSON.stringify(toForm(settings));
+
+  const update = <K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) =>
+    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+
+  const addAssumption = () => {
+    const value = newAssumption.trim();
+    if (!value) return;
+    update("assumptions", [...form.assumptions, value]);
     setNewAssumption("");
   };
 
-  const removeAssumption = (index: number) => {
-    setAssumptions((prev) =>
-      prev.filter((_, i) => i !== index)
+  const removeAssumption = (index: number) =>
+    update(
+      "assumptions",
+      form.assumptions.filter((_, i) => i !== index),
     );
+
+  const handleSave = () => {
+    saveMut.mutate(form, {
+      onSuccess: () => toast.success("Settings saved"),
+    });
   };
+
+  const handleReset = () => {
+    resetMut.mutate(undefined, {
+      onSuccess: (defaults) => {
+        setForm(toForm(defaults));
+        toast.success("Settings reset to defaults");
+      },
+    });
+  };
+
+  const activeScenario = SCENARIO_MODES.find((m) => m.value === form.scenario_mode);
 
   return (
     <div className="min-h-screen">
       <div className="container mx-auto max-w-4xl px-4 py-4">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight">
-            Settings
-          </h1>
-
+          <h1 className="text-4xl font-bold tracking-tight">Settings</h1>
           <p className="mt-2 text-muted-foreground">
-            Configure your analysis context and display
-            preferences
+            Configure your analysis context and display preferences
           </p>
         </div>
 
@@ -68,34 +140,27 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Scenario Mode</CardTitle>
-
               <p className="text-sm text-muted-foreground">
-                Choose the default analysis perspective
-                for AI responses
+                Choose the default analysis perspective for AI responses
               </p>
             </CardHeader>
-
             <CardContent className="space-y-4">
-              <Tabs defaultValue="optimistic">
+              <Tabs
+                value={form.scenario_mode}
+                onValueChange={(v) =>
+                  update("scenario_mode", v as AppSettings["scenario_mode"])
+                }
+              >
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="optimistic">
-                    Optimistic
-                  </TabsTrigger>
-
-                  <TabsTrigger value="realistic">
-                    Realistic
-                  </TabsTrigger>
-
-                  <TabsTrigger value="pessimistic">
-                    Pessimistic
-                  </TabsTrigger>
+                  {SCENARIO_MODES.map((m) => (
+                    <TabsTrigger key={m.value} value={m.value}>
+                      {m.label}
+                    </TabsTrigger>
+                  ))}
                 </TabsList>
               </Tabs>
-
               <p className="text-sm text-muted-foreground">
-                Emphasizes growth opportunities,
-                favorable market conditions, and
-                potential upsides.
+                {activeScenario?.description}
               </p>
             </CardContent>
           </Card>
@@ -104,32 +169,26 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Time Horizon</CardTitle>
-
               <p className="text-sm text-muted-foreground">
-                Set the default planning timeframe for
-                predictions
+                Set the default planning timeframe for predictions
               </p>
             </CardHeader>
-
             <CardContent>
-              <Select defaultValue="3">
+              <Select
+                value={form.time_horizon}
+                onValueChange={(v) =>
+                  update("time_horizon", v as AppSettings["time_horizon"])
+                }
+              >
                 <SelectTrigger className="max-w-xs">
                   <SelectValue placeholder="Select horizon" />
                 </SelectTrigger>
-
                 <SelectContent>
-                  <SelectItem value="1">
-                    1 Year
-                  </SelectItem>
-                  <SelectItem value="3">
-                    3 Years
-                  </SelectItem>
-                  <SelectItem value="5">
-                    5 Years
-                  </SelectItem>
-                  <SelectItem value="10">
-                    10 Years
-                  </SelectItem>
+                  {TIME_HORIZONS.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </CardContent>
@@ -139,34 +198,29 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Industry Context</CardTitle>
-
               <p className="text-sm text-muted-foreground">
-                Provide context about your industry and
-                domain for more relevant insights
+                Provide context about your industry and domain for more relevant
+                insights
               </p>
             </CardHeader>
-
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Industry
-                  </label>
-
+                  <label className="text-sm font-medium">Industry</label>
                   <Input
-                    defaultValue="Technology"
-                    placeholder="Industry"
+                    value={form.industry}
+                    onChange={(e) => update("industry", e.target.value)}
+                    placeholder="e.g. Technology"
+                    maxLength={100}
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Domain
-                  </label>
-
+                  <label className="text-sm font-medium">Domain</label>
                   <Input
-                    defaultValue="B2B SaaS"
-                    placeholder="Domain"
+                    value={form.domain}
+                    onChange={(e) => update("domain", e.target.value)}
+                    placeholder="e.g. B2B SaaS"
+                    maxLength={100}
                   />
                 </div>
               </div>
@@ -177,45 +231,45 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Current Assumptions</CardTitle>
-
               <p className="text-sm text-muted-foreground">
-                Define base assumptions the AI should
-                consider in all analyses
+                Define base assumptions the AI should consider in all analyses
               </p>
             </CardHeader>
-
             <CardContent className="space-y-3">
-              {assumptions.map((assumption, index) => (
+              {form.assumptions.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">
+                  No assumptions added yet.
+                </p>
+              )}
+              {form.assumptions.map((assumption, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between rounded-md border px-3 py-2"
                 >
-                  <span className="text-sm">
-                    {assumption}
-                  </span>
-
+                  <span className="text-sm">{assumption}</span>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() =>
-                      removeAssumption(index)
-                    }
+                    onClick={() => removeAssumption(index)}
+                    aria-label="Remove assumption"
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
               ))}
-
               <div className="flex gap-2">
                 <Input
                   value={newAssumption}
-                  onChange={(e) =>
-                    setNewAssumption(e.target.value)
-                  }
+                  onChange={(e) => setNewAssumption(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addAssumption();
+                    }
+                  }}
                   placeholder="Add a new assumption..."
                 />
-
-                <Button onClick={addAssumption}>
+                <Button onClick={addAssumption} disabled={!newAssumption.trim()}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add
                 </Button>
@@ -226,72 +280,77 @@ export default function SettingsPage() {
           {/* Display Preferences */}
           <Card>
             <CardHeader>
-              <CardTitle>
-                Display Preferences
-              </CardTitle>
-
+              <CardTitle>Display Preferences</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Customize how AI responses are displayed
               </p>
             </CardHeader>
-
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium">
-                    Show Confidence Scores
-                  </h4>
-
+                  <h4 className="font-medium">Show Confidence Scores</h4>
                   <p className="text-sm text-muted-foreground">
-                    Display confidence percentages on AI
-                    responses
+                    Display confidence percentages on AI responses
                   </p>
                 </div>
-
-                <Switch defaultChecked />
+                <Switch
+                  checked={form.show_confidence_scores}
+                  onCheckedChange={(v) => update("show_confidence_scores", v)}
+                />
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium">
-                    Show Data Badges
-                  </h4>
-
+                  <h4 className="font-medium">Show Data Badges</h4>
                   <p className="text-sm text-muted-foreground">
-                    Display data range badges on
-                    responses
+                    Display data range badges on responses
                   </p>
                 </div>
-
-                <Switch defaultChecked />
+                <Switch
+                  checked={form.show_data_badges}
+                  onCheckedChange={(v) => update("show_data_badges", v)}
+                />
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium">
-                    Auto-expand Details
-                  </h4>
-
+                  <h4 className="font-medium">Auto-expand Details</h4>
                   <p className="text-sm text-muted-foreground">
-                    Automatically show assumptions and
-                    data signals
+                    Automatically show assumptions and data signals
                   </p>
                 </div>
-
-                <Switch />
+                <Switch
+                  checked={form.auto_expand_details}
+                  onCheckedChange={(v) => update("auto_expand_details", v)}
+                />
               </div>
             </CardContent>
           </Card>
 
           {/* Footer Actions */}
           <div className="flex justify-end gap-3">
-            <Button variant="outline">
-              <RotateCcw className="mr-2 h-4 w-4" />
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              disabled={resetMut.isPending || saveMut.isPending}
+            >
+              {resetMut.isPending ? (
+                <CircularLoader size="sm" />
+              ) : (
+                <RotateCcw className="mr-2 h-4 w-4" />
+              )}
               Reset to Defaults
             </Button>
 
-            <Button>
-              <Save className="mr-2 h-4 w-4" />
+            <Button
+              onClick={handleSave}
+              disabled={!isDirty || saveMut.isPending || resetMut.isPending}
+            >
+              {saveMut.isPending ? (
+                <CircularLoader size="sm" className="border-white" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
               Save Settings
             </Button>
           </div>

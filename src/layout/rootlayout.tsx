@@ -1,6 +1,7 @@
 import { NewAppSidebar } from "@/components/global/NewSidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Outlet, useLocation } from "react-router";
+import PersonaPanelDialog from "@/components/common/Chat/PersonaPanelDialog";
 
 const Rootlayout = () => {
   const { pathname } = useLocation();
@@ -40,6 +41,9 @@ const Rootlayout = () => {
           </main>
         </SidebarInset>
       </div>
+
+      {/* Persona panel: shared across chat routes, toggled via redux. */}
+      <PersonaPanelDialog />
     </SidebarProvider>
   );
 };

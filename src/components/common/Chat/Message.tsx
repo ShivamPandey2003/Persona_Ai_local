@@ -6,28 +6,29 @@ import {
   MessageContent,
 } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
-import { Copy } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { memo, useState } from "react";
-import { FileUploader } from "./fileUploader";
+import { toast } from "sonner";
 
 type MessageComponentProps = {
   message: MessageT;
   isLastMessage: boolean;
-  isFirstMessage: boolean;
-  isStreaming?: boolean;
-  handleSubmit: (p:string)=>void
 };
 
 export const MessageComponent = memo(
-  ({
-    message,
-    isLastMessage,
-    isStreaming,
-    isFirstMessage,
-    handleSubmit
-  }: MessageComponentProps) => {
-    const [files, setFiles] = useState<File[]>([]);
+  ({ message, isLastMessage }: MessageComponentProps) => {
+    const [copied, setCopied] = useState(false);
     const isAssistant = message.userType === "Assistant";
+
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(message.message);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      } catch {
+        toast.error("Couldn't copy to clipboard");
+      }
+    };
 
     return (
       <Message
@@ -40,7 +41,6 @@ export const MessageComponent = memo(
           <div className="group flex w-full flex-col gap-0">
             <MessageContent
               className="text-foreground prose w-full min-w-0 flex-1 rounded-lg bg-transparent p-0"
-              // html={message.type === "HTML"}
               markdown
             >
               {message.message}
@@ -48,34 +48,35 @@ export const MessageComponent = memo(
             <MessageActions
               className={cn(
                 "-ml-2.5 flex",
-                isStreaming && "hidden",
                 isLastMessage && "opacity-100",
               )}
             >
-              <MessageAction tooltip="Copy" delayDuration={100}>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <Copy />
+              <MessageAction tooltip={copied ? "Copied" : "Copy"} delayDuration={100}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full"
+                  onClick={handleCopy}
+                >
+                  {copied ? <Check className="text-emerald-600" /> : <Copy />}
                 </Button>
               </MessageAction>
             </MessageActions>
-            {isFirstMessage && (
-              <FileUploader files={files} setFiles={setFiles} onSubmit={handleSubmit} />
-              
-            )}
           </div>
         ) : (
           <div className="group flex w-full flex-col items-end gap-1">
             <MessageContent className="bg-muted text-primary max-w-[85%] rounded-3xl px-5 py-2.5 whitespace-pre-wrap sm:max-w-[75%]">
               {message.message}
             </MessageContent>
-            <MessageActions
-              className={cn(
-                "flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-              )}
-            >
-              <MessageAction tooltip="Copy" delayDuration={100}>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <Copy />
+            <MessageActions className="flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              <MessageAction tooltip={copied ? "Copied" : "Copy"} delayDuration={100}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full"
+                  onClick={handleCopy}
+                >
+                  {copied ? <Check className="text-emerald-600" /> : <Copy />}
                 </Button>
               </MessageAction>
             </MessageActions>
