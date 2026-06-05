@@ -1,56 +1,64 @@
-import { apiRequest } from "@/services/apiService";
 import { useMutation } from "@tanstack/react-query";
-import { useParams } from "react-router";
+import { getAuthToken, postApi } from "@/lib/api";
 
-type ChatMessageT = {
+/* ------------------------------------------------------------------ */
+/* Start a persona-builder conversation                               */
+/* ------------------------------------------------------------------ */
+
+type BuilderStartResponse = {
+  conversation_id: string;
+  first_message: string;
+};
+
+/** POST /v1/persona/chat/start. */
+export const useBuilderChatStart = () => {
+  const token = getAuthToken();
+  return useMutation<BuilderStartResponse, Error, { projectId: string }>({
+    mutationKey: ["BuilderChatStart"],
+    mutationFn: ({ projectId }) =>
+      postApi<BuilderStartResponse>("persona/chat/start", {
+        token,
+        project_id: projectId,
+      }),
+  });
+};
+
+/* ------------------------------------------------------------------ */
+/* Send a message in a builder conversation                           */
+/* ------------------------------------------------------------------ */
+
+export type BuilderMessageResponse = {
   assistant_message: string;
   persona_progress: PersonaProgressT;
 };
 
-type ChatMessageRes = {
-  header: ResponseHeader;
-  response: ChatMessageT;
-};
-
-type ChatMessagePayload = {
-  token: string;
-  conversation_id: string;
-  message: string;
-};
-
-export const ChatMessage = (cb: React.Dispatch<React.SetStateAction<MessageT[]>>) => {
-  const userStr = localStorage.getItem("user");
-  const userData = userStr ? JSON.parse(atob(userStr)) : null;
-  const token = userData?.token || "";
-  const { id } = useParams();
-  const ChatMessage = useMutation<
-    ChatMessageRes,
-    Record<string, any>,
-    { message: string }
-  >({
-    mutationKey: ["ChatMessages"],
-    mutationFn: async (pd) => {
-      const payload: ChatMessagePayload = {
-        token: token,
-        conversation_id: id as string,
-        message: pd.message,
-      };
-      const res = await apiRequest("post", "persona/chat/message", payload);
-
-      return res.response;
-    },
-    onSuccess: (data) => {
-      cb((pre) => [
-        ...pre,
-        {
-          message: data.response.assistant_message,
-          userType: "Assistant",
-          id: crypto.randomUUID(),
-          persona_progress: data.response.persona_progress,
-        },
-      ]);
-    },
+/** POST /v1/persona/chat/message. */
+export const useBuilderChatMessage = (conversationId: string) => {
+  const token = getAuthToken();
+  return useMutation<BuilderMessageResponse, Error, { message: string }>({
+    mutationKey: ["BuilderChatMessage", conversationId],
+    mutationFn: ({ message }) =>
+      postApi<BuilderMessageResponse>("persona/chat/message", {
+        token,
+        conversation_id: conversationId,
+        message,
+      }),
   });
+};
 
-  return ChatMessage
+/* ------------------------------------------------------------------ */
+/* End a builder conversation                                         */
+/* ------------------------------------------------------------------ */
+
+/** POST /v1/persona/chat/end. */
+export const useBuilderChatEnd = (conversationId: string) => {
+  const token = getAuthToken();
+  return useMutation<Record<string, never>, Error, void>({
+    mutationKey: ["BuilderChatEnd", conversationId],
+    mutationFn: () =>
+      postApi<Record<string, never>>("persona/chat/end", {
+        token,
+        conversation_id: conversationId,
+      }),
+  });
 };

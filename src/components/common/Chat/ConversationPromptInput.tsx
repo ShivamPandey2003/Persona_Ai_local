@@ -2,338 +2,225 @@ import {
   ChatContainerContent,
   ChatContainerRoot,
 } from "@/components/ui/chat-container";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router";
+import { useDispatch } from "react-redux";
+import { Sparkles } from "lucide-react";
+
 import { MessageComponent } from "./Message";
 import LoadingMessage from "./LoadingMessage";
 import ErrorMessage from "./ErrorMessage";
-import {
-  PromptInput,
-  PromptInputActions,
-  PromptInputTextarea,
-} from "@/components/ui/prompt-input";
+import ChatComposer from "./ChatComposer";
 import { Button } from "@/components/ui/button";
-import { ArrowUp } from "lucide-react";
-// import { SCRIPT, type ScriptLine } from "@/data/DummyChat";
-// import type { AppDispatch } from "@/redux/store";
-// import { useDispatch } from "react-redux";
-import { useLocation, useNavigate } from "react-router";
-// import { setPersonaDialog, setProjects } from "@/redux/ProjectSlice";
-// import { PERSONA_DETAILS } from "@/data/DummyPersona";
-// import { GetHtmlTitle } from "@/lib/utils";
-import { ChatStart } from "@/api/Chat/query";
-import { ChatMessage } from "@/api/Chat/mutation";
+import { CircularLoader } from "@/components/ui/loader";
 
+import { useBuilderChatHistory } from "@/api/Chat/query";
+import { useBuilderChatMessage, useBuilderChatEnd } from "@/api/Chat/mutation";
+import { usePersonaGenerate } from "@/api/Persona/mutation";
+import { useActiveProjectId } from "@/hooks/useActiveProjectId";
+import { touchSession } from "@/lib/chatStore";
+import { setPersonaDialog } from "@/redux/ProjectSlice";
+import type { AppDispatch } from "@/redux/store";
+import { queryClient } from "@/provider";
+
+function snippet(text: string, words = 6): string {
+  return text.split(/\s+/).slice(0, words).join(" ");
+}
+
+/**
+ * Persona-builder conversation (route /chat/:id).
+ *
+ * Rehydrates the transcript from history and lets the user keep describing
+ * personas. "End & View Personas" closes the conversation, generates personas
+ * for the project (dummy data; idempotent), and opens the persona panel. The
+ * conversation is always created upstream by ChatEntry, so this view never
+ * starts one itself.
+ */
 function ConversationPromptInput() {
-  // const { projects } = useSelector((state: RootState) => state.Project);
-  const [input, setInput] = useState("");
-  // const [isStreaming, setIsStreaming] = useState(false);
-  const navigate = useNavigate();
-  // const streamIntervalRef = useRef<number | null>(null);
-  // const isStreamingRef = useRef(false);
-  // const hasStreamedRef = useRef<boolean>(false);
+  const { id: conversationId } = useParams();
+  const projectId = useActiveProjectId();
+  const dispatch = useDispatch<AppDispatch>();
+
   const [messages, setMessages] = useState<MessageT[]>([]);
-  const { state } = useLocation();
-  // const dispatch = useDispatch<AppDispatch>();
-  // const { id } = useParams();
-  const { data, status } = ChatStart();
-  const { mutate, status: ChatMessageStatus } = ChatMessage(setMessages);
+  const [input, setInput] = useState("");
+  const [progress, setProgress] = useState<PersonaProgressT | null>(null);
+  const [ended, setEnded] = useState(false);
+  const [finishing, setFinishing] = useState(false);
 
-  // const streamResponse = () => {
-  //   if (isStreamingRef.current) return;
+  const hydratedRef = useRef(false);
 
-  //   const assistantCount = messages.filter(
-  //     (m) => m.role === "assistant",
-  //   ).length;
+  const historyQuery = useBuilderChatHistory(conversationId);
+  const messageMut = useBuilderChatMessage(conversationId ?? "");
+  const endMut = useBuilderChatEnd(conversationId ?? "");
+  const generateMut = usePersonaGenerate();
 
-  //   const response = SCRIPT[assistantCount];
-
-  //   if (!response) return;
-
-  //   const fullResponse = response.content;
-  //   const isHtml = response.type === "HTML";
-
-  //   const messageId = Date.now();
-
-  //   dispatch(
-  //     setProjects(
-  //       projects.map((item) => {
-  //         if (item.id === state.projectId) {
-  //           return {
-  //             ...item,
-  //           };
-  //         }
-
-  //         return item;
-  //       }),
-  //     ),
-  //   );
-
-  //   // Create assistant message
-  //   setMessages((prev) => [
-  //     ...prev,
-  //     {
-  //       id: messageId,
-  //       role: "assistant",
-  //       content: "",
-  //       type: response.type,
-  //     },
-  //   ]);
-
-  //   // HTML messages should render immediately
-  //   if (isHtml) {
-  //     setMessages((prev) =>
-  //       prev.map((msg) =>
-  //         msg.id === messageId
-  //           ? {
-  //               ...msg,
-  //               content: fullResponse,
-  //             }
-  //           : msg,
-  //       ),
-  //     );
-
-  //     if (response.createdAt) {
-  //       dispatch(
-  //         setProjects(
-  //           projects.map((item) => {
-  //             if (item.id === state.projectId) {
-  //               return {
-  //                 ...item,
-  //                 personas: PERSONA_DETAILS,
-  //               };
-  //             }
-
-  //             return item;
-  //           }),
-  //         ),
-  //       );
-
-  //       dispatch(setPersonaDialog(true));
-  //     }
-
-  //     return;
-  //   }
-
-  //   // Markdown/Text messages stream normally
-  //   isStreamingRef.current = true;
-  //   setIsStreaming(true);
-
-  //   let charIndex = 0;
-
-  //   streamIntervalRef.current = window.setInterval(() => {
-  //     if (charIndex < fullResponse.length) {
-  //       const currentContent = fullResponse.slice(0, charIndex + 1);
-
-  //       setMessages((prev) =>
-  //         prev.map((msg) =>
-  //           msg.id === messageId
-  //             ? {
-  //                 ...msg,
-  //                 content: currentContent,
-  //               }
-  //             : msg,
-  //         ),
-  //       );
-
-  //       charIndex++;
-  //     } else {
-  //       clearInterval(streamIntervalRef.current!);
-
-  //       isStreamingRef.current = false;
-  //       setIsStreaming(false);
-
-  //       if (response.createdAt) {
-  //         dispatch(
-  //           setProjects(
-  //             projects.map((item) => {
-  //               if (item.id === state.projectId) {
-  //                 return {
-  //                   ...item,
-  //                   personas: PERSONA_DETAILS,
-  //                 };
-  //               }
-
-  //               return item;
-  //             }),
-  //           ),
-  //         );
-
-  //         dispatch(setPersonaDialog(true));
-  //       }
-  //     }
-  //   }, 30);
-  // };
-
-  // useEffect(() => {
-  //   if (hasStreamedRef.current) return;
-
-  //   const project = projects.find((pre) => pre.id === state?.projectId);
-
-  //   if (project && project.personas.length === 0) {
-  //     hasStreamedRef.current = true;
-  //     streamResponse();
-  //   }
-  // }, [state?.projectId, projects]);
-
-  // useEffect(() => {
-  //   return () => {
-  //     if (streamIntervalRef.current) {
-  //       clearInterval(streamIntervalRef.current);
-  //     }
-  //   };
-  // }, []);
-
-  // useEffect(() => {
-  //   if (!id) return;
-
-  //   if (isStreamingRef.current) return;
-
-  //   if (messages.length === 1) {
-  //     const message = messages[0];
-  //     dispatch(
-  //       setProjects(
-  //         projects.map((item) => {
-  //           if (item.id === state.projectId) {
-  //             return {
-  //               ...item,
-  //               chats: [
-  //                 {
-  //                   id: id,
-  //                   title:
-  //                     message.type === "HTML"
-  //                       ? GetHtmlTitle(message.content).split(" ").slice(0, 4).join(" ")
-  //                       : message.content.split(" ").slice(0, 4).join(" "),
-  //                   description: message.content
-  //                     .split(" ")
-  //                     .slice(0, 12)
-  //                     .join(" "),
-  //                   Messages: [],
-  //                 },
-  //                 ...item.chats,
-  //               ],
-  //             };
-  //           }
-
-  //           return item;
-  //         }),
-  //       ),
-  //     );
-  //   }
-  // }, [messages, isStreamingRef.current]);
-
+  // Reset local state when switching between conversations.
   useEffect(() => {
-    if (data) {
-      navigate(
-        {
-          pathname: `/chat/${data.response.conversation_id}`,
-        },
-        {
-          state: { projectId: state.projectId },
-          replace: true,
-        },
-      );
+    hydratedRef.current = false;
+    setMessages([]);
+    setProgress(null);
+    setEnded(false);
+  }, [conversationId]);
 
-      setMessages([
-        {
-          id: crypto.randomUUID(),
-          message: data.response.first_message,
-          userType: "Assistant",
-        },
-      ]);
-    }
-  }, [data]);
+  // Seed the transcript from history once per conversation.
+  useEffect(() => {
+    if (!historyQuery.data || hydratedRef.current) return;
+    hydratedRef.current = true;
+    setMessages(historyQuery.data);
+  }, [historyQuery.data]);
 
-  const handleSubmit = () => {
-    if (!input.trim()) return;
+  const handleSend = () => {
+    const text = input.trim();
+    if (!text || !conversationId || ended || messageMut.isPending) return;
 
-    setMessages((pre) => [
-      ...pre,
-      {
-        id: crypto.randomUUID(),
-        userType: "User",
-        message: input,
-      },
+    const isFirstUserMessage = !messages.some((m) => m.userType === "User");
+    setInput("");
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), userType: "User", message: text },
     ]);
 
-    mutate({ message: input });
-    // streamResponse();
-    setInput("");
+    messageMut.mutate(
+      { message: text },
+      {
+        onSuccess: (data) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              userType: "Assistant",
+              message: data.assistant_message,
+              persona_progress: data.persona_progress,
+            },
+          ]);
+          setProgress(data.persona_progress);
+          touchSession(conversationId, {
+            title: isFirstUserMessage ? snippet(text) : undefined,
+          });
+        },
+        onError: (err) => {
+          if (/ended/i.test(err.message)) setEnded(true);
+        },
+      },
+    );
   };
+
+  const openPersonaPanel = () => dispatch(setPersonaDialog(true));
+
+  // End the builder chat, ensure the project has personas (generates a dummy
+  // set on first run; idempotent thereafter), refresh the panel queries, then
+  // open the persona panel so the user can start single/group chats.
+  const handleEnd = async () => {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      if (conversationId && !ended) {
+        try {
+          await endMut.mutateAsync();
+        } catch {
+          // Ending may fail if already ended — proceed to personas regardless.
+        }
+        setEnded(true);
+        touchSession(conversationId, { ended: true });
+      }
+
+      if (projectId) {
+        try {
+          await generateMut.mutateAsync({ projectId });
+        } catch {
+          // Generation errors are surfaced via toast; still open the panel.
+        }
+        queryClient.invalidateQueries({ queryKey: ["PersonaList", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["PersonaDashboard", projectId] });
+      }
+
+      openPersonaPanel();
+    } finally {
+      setFinishing(false);
+    }
+  };
+
+  const isHistoryLoading = historyQuery.isLoading;
+  const completion = progress?.completion ?? 0;
 
   return (
     <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden">
-      <ChatContainerRoot className="relative flex-1 space-y-0 overflow-hidden">
-        <ChatContainerContent className="space-y-12 py-12">
-          {messages.map((message, index) => {
-            const isLastMessage = index === messages.length - 1;
-            const isFirstMessage = index === 0;
-
-            return (
-              <MessageComponent
-                handleSubmit={() => {
-                  // setMessages((pre) => [
-                  //   ...pre,
-                  //   {
-                  //     id: 1222,
-                  //     role: "user",
-                  //     content: p,
-                  //   },
-                  // ]);
-                  // streamResponse();
-                }}
-                key={message.id}
-                message={message}
-                isLastMessage={isLastMessage}
-                isFirstMessage={isFirstMessage}
+      {/* Toolbar: progress + end */}
+      <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center justify-between gap-4 px-4 py-2">
+        {progress ? (
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="shrink-0 text-xs font-medium text-muted-foreground">
+              Persona {progress.persona_number}
+            </span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${completion}%` }}
               />
-            );
-          })}
-
-          {(status === "pending" || ChatMessageStatus === "pending") && (
-            <LoadingMessage />
+            </div>
+            <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
+              {completion}%
+            </span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">Persona Builder</span>
+        )}
+        <Button
+          size="sm"
+          variant={completion >= 100 ? "default" : "outline"}
+          onClick={handleEnd}
+          disabled={finishing}
+          className="shrink-0"
+        >
+          {finishing ? (
+            <CircularLoader size="sm" />
+          ) : (
+            <Sparkles className="mr-1.5 h-4 w-4" />
           )}
-          {status === "error" && (
-            <ErrorMessage error={{ message: "test", name: "test" }} />
+          {finishing
+            ? "Generating personas…"
+            : ended
+              ? "View Personas"
+              : "End & View Personas"}
+        </Button>
+      </div>
+
+      <ChatContainerRoot className="relative flex-1 space-y-0 overflow-hidden">
+        <ChatContainerContent className="space-y-12 py-8">
+          {messages.map((message, index) => (
+            <MessageComponent
+              key={message.id}
+              message={message}
+              isLastMessage={index === messages.length - 1}
+            />
+          ))}
+
+          {(isHistoryLoading || messageMut.isPending) && <LoadingMessage />}
+          {historyQuery.isError && (
+            <ErrorMessage
+              error={{
+                name: "HistoryError",
+                message: "Couldn't load this conversation.",
+              }}
+            />
           )}
         </ChatContainerContent>
       </ChatContainerRoot>
-      <div className="inset-x-0 bottom-0 mx-auto w-full max-w-3xl shrink-0 px-3 pb-3 md:px-5">
-        <PromptInput
-          isLoading={false}
-          value={input}
-          onValueChange={setInput}
-          onSubmit={handleSubmit}
-          className="border-input bg-popover relative z-10 w-full rounded-3xl border p-0 pt-1 shadow-xs"
-        >
-          <div className="flex flex-col">
-            <PromptInputTextarea
-              placeholder="Ask anything"
-              className="min-h-[44px] pt-3 pl-4 text-base leading-[1.3] sm:text-base md:text-base"
-            />
 
-            <PromptInputActions className="mt-3 flex w-full items-center justify-between gap-2 p-2">
-              <div />
-              <div className="flex items-center gap-2">
-                <Button
-                  size="icon"
-                  disabled={
-                    !input.trim()
-                    // || (status !== "ready" && status !== "error")
-                  }
-                  onClick={handleSubmit}
-                  className="size-9 rounded-full"
-                >
-                  {true ? (
-                    <ArrowUp size={18} />
-                  ) : (
-                    <span className="size-3 rounded-xs bg-white" />
-                  )}
-                </Button>
-              </div>
-            </PromptInputActions>
-          </div>
-        </PromptInput>
-      </div>
+      {ended && (
+        <p className="mx-auto w-full max-w-3xl px-5 pb-1 text-center text-xs text-muted-foreground">
+          This conversation has ended.
+        </p>
+      )}
+
+      <ChatComposer
+        value={input}
+        onChange={setInput}
+        onSubmit={handleSend}
+        disabled={ended}
+        isSending={messageMut.isPending}
+        placeholder="Describe your target persona…"
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router";
 import ProtectedRoute from "./ProtectedRoute";
 // import SignupPage from "@/pages/Signup";
 import ChatPage from "@/pages/Chat";
+import GroupChatPage from "@/pages/GroupChat";
 import Rootlayout from "@/layout/rootlayout";
 import DashboardPage from "@/pages/Dashboard";
 import SettingsPage from "@/pages/setting";
@@ -37,6 +38,16 @@ const Router = createBrowserRouter([
       {
         path: ":id",
         element: <ChatPage />,
+      },
+    ],
+  },
+  {
+    path: "/group-chat",
+    element: <ProtectedRoute element={<Rootlayout />} />,
+    children: [
+      {
+        path: ":groupId",
+        element: <GroupChatPage />,
       },
     ],
   },

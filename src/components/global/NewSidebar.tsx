@@ -1,5 +1,5 @@
-import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { Settings, LayoutDashboard, Plus, Users } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { Settings, LayoutDashboard, Plus, Users, MessageSquare } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,10 +17,12 @@ import { NavUser } from "./NavUser";
 import { Logo } from "@/assets";
 import { cn } from "@/lib/utils";
 import { setPersonaDialog } from "@/redux/ProjectSlice";
-import { useDispatch, useSelector } from "react-redux";
-import type { AppDispatch, RootState } from "@/redux/store";
+import { useDispatch } from "react-redux";
+import type { AppDispatch } from "@/redux/store";
 import { useMemo } from "react";
 import { ScrollArea } from "../ui/scroll-area";
+import { listSessions } from "@/lib/chatStore";
+import { useActiveProjectId, chatIdFromPath } from "@/hooks/useActiveProjectId";
 
 const items = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -28,27 +30,27 @@ const items = [
 ];
 
 export function NewAppSidebar() {
-  const { pathname, state: LocState } = useLocation();
-  const { projects } = useSelector((state: RootState) => state.Project);
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
   const dispatch = useDispatch<AppDispatch>();
   const isCollapsed = state === "collapsed";
-  const { id } = useParams();
+  const projectId = useActiveProjectId();
 
-  const LocStateId = LocState as { projectId: string };
+  const inChat = pathname.includes("/chat") || pathname.includes("/group-chat");
+  const activeId = chatIdFromPath(pathname);
 
-  const Chats = useMemo(() => {
-    if (!LocStateId || !LocStateId.projectId) {
-      return [];
-    }
+  // Recents are persisted locally (the backend has no list-conversations API).
+  // Recompute on navigation so a freshly started chat appears.
+  const sessions = useMemo(
+    () => listSessions(projectId),
+    [projectId, pathname, activeId],
+  );
 
-    const project = projects.find((pre) => pre.id === LocStateId.projectId);
-
-    if (!project) return [];
-
-    return project.chats;
-  }, [projects, state]);
+  const startNewChat = () => {
+    if (!projectId) return;
+    navigate("/chat", { state: { projectId, forceNew: true } });
+  };
 
   return (
     <Sidebar
@@ -108,11 +110,11 @@ export function NewAppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
-              {pathname.includes("/chat") && (
+              {inChat && (
                 <>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      onClick={() => dispatch(setPersonaDialog(true))}
+                      onClick={startNewChat}
                       tooltip={"New chat"} // Crucial for icon mode tooltips
                       className={cn(
                         "w-full h-10 rounded-lg transition-all duration-150 font-medium px-3 flex items-center",
@@ -128,7 +130,8 @@ export function NewAppSidebar() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      tooltip={"New chat"} // Crucial for icon mode tooltips
+                      onClick={() => dispatch(setPersonaDialog(true))}
+                      tooltip={"Start Group Chat"} // Crucial for icon mode tooltips
                       className={cn(
                         "w-full h-10 rounded-lg transition-all duration-150 font-medium px-3 flex items-center",
                         "text-[#4B5563] hover:bg-[#6338F6]/10 hover:text-[#6338F6]",
@@ -148,29 +151,35 @@ export function NewAppSidebar() {
         </SidebarGroup>
 
         {/* Recents history section auto-hidden when icon mode is active */}
-        {pathname.includes("/chat") && (
+        {inChat && (
           <SidebarGroup className="px-2 group-data-[collapsible=icon]:hidden">
             <span className="text-xs font-semibold text-[#6B7280] tracking-wider block mb-2">
               Recents
             </span>
-            {Chats.length ? (
+            {sessions.length ? (
               <ScrollArea className="flex-1 overflow-hidden">
                 <SidebarMenu>
-                  {Chats.map((item:any) => {
+                  {sessions.map((session) => {
+                    const Icon = session.kind === "group" ? Users : MessageSquare;
+                    const to =
+                      session.kind === "group"
+                        ? `/group-chat/${session.id}`
+                        : `/chat/${session.id}`;
                     return (
-                      <SidebarMenuItem key={item.title}>
+                      <SidebarMenuItem key={session.id}>
                         <SidebarMenuButton
                           asChild
-                          isActive={item.id === id}
+                          isActive={session.id === activeId}
                           className="data-active:bg-primary! data-active:text-white"
                         >
                           <Link
-                            to={`/chat/${item.id}`}
-                            state={{ projectId: LocState.projectId }}
-                            className=""
+                            to={to}
+                            state={{ projectId: session.projectId }}
+                            title={session.title}
                           >
-                            <span className="overflow-hidden text-ellipsis max-w-full">
-                            {item.title}
+                            <Icon size={14} className="shrink-0" />
+                            <span className="overflow-hidden text-ellipsis whitespace-nowrap max-w-full">
+                              {session.title}
                             </span>
                           </Link>
                         </SidebarMenuButton>
