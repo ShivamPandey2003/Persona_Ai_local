@@ -5,16 +5,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { setProjectDelete } from "@/redux/GlobalModalSlice";
+import { setProjectDelete, setProjectEdit } from "@/redux/GlobalModalSlice";
 import type { AppDispatch } from "@/redux/store";
+import type { Project } from "@/api/Projects/query";
 import { EllipsisVertical } from "lucide-react";
 import { useDispatch } from "react-redux";
 
 type Props = {
-  selectedId: string;
+  project: Project;
 };
 
-export function Dropdown({ selectedId }: Props) {
+export function Dropdown({ project }: Props) {
   const dispatch = useDispatch<AppDispatch>();
 
   return (
@@ -25,12 +26,14 @@ export function Dropdown({ selectedId }: Props) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem>Open project</DropdownMenuItem>
-        <DropdownMenuItem>Edit</DropdownMenuItem>
-        <DropdownMenuItem>Settings</DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer">Open project</DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer" onClick={() => dispatch(setProjectEdit(project))}>
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer">Settings</DropdownMenuItem>
         <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
-          onClick={() => dispatch(setProjectDelete(selectedId))}
+          className="text-destructive focus:text-destructive cursor-pointer"
+          onClick={() => dispatch(setProjectDelete(project.project_id))}
         >
           Delete
         </DropdownMenuItem>

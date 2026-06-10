@@ -10,6 +10,7 @@ import { usePersonaList } from "@/api/Persona/query";
 import { getAuthToken, postApi } from "@/lib/api";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { findActiveBuilderSession, upsertSession } from "@/lib/chatStore";
+import { queryClient } from "@/provider";
 
 type BuilderStartResponse = {
   conversation_id: string;
@@ -63,8 +64,10 @@ function BuilderEntry({
       }
 
       try {
-        const data = await postApi<BuilderStartResponse>("persona/chat/start", {
+        // /chat/start was merged into /chat/message, selected by flow="start".
+        const data = await postApi<BuilderStartResponse>("persona/chat/message", {
           token: getAuthToken(),
+          flow: "start",
           project_id: projectId,
         });
         if (data?.conversation_id) {
@@ -74,6 +77,8 @@ function BuilderEntry({
             projectId,
             title: "New persona chat",
           });
+          // Surface the new conversation in the sidebar Recents (chat-list).
+          queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
           navigate(`/chat/${data.conversation_id}`, {
             state: { projectId },
             replace: true,

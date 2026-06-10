@@ -20,7 +20,7 @@ export default function PersonaAILoginPage() {
       password: "",
     },
   );
-  const {mutate, data} = Login();
+  const {mutate} = Login();
 
 
   const OnSubmit = (e: MouseEvent<HTMLButtonElement>) => {
@@ -33,8 +33,6 @@ export default function PersonaAILoginPage() {
 
     mutate(payload)
   };
-
-  console.log(data)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6 flex items-center justify-center">

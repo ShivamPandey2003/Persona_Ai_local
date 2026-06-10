@@ -43,7 +43,7 @@ export function NavUser() {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className={cn("data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground md:h-8 md:p-0")}
+              className={cn("data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground md:h-12 md:p-2 cursor-pointer")}
             >
               <Avatar className="h-8 w-8 rounded-full">
                 <AvatarFallback className="rounded-full bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white">{getInitials(`${User.firstName} ${User.lastName}`)}</AvatarFallback>
@@ -73,7 +73,7 @@ export function NavUser() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={()=>mutate()}>
+            <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={()=>mutate()}>
               <LogOut />
               Log out
             </DropdownMenuItem>

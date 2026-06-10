@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import { SlidersHorizontal, Square } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
+import type { StickToBottomContext } from "use-stick-to-bottom";
 
 import {
   ChatContainerContent,
@@ -26,15 +27,15 @@ import GroupMessage from "./GroupMessage";
 import AssumptionsDialog from "./AssumptionsDialog";
 
 import {
-  useGroupChatHistory,
+  useGroupHistory,
   useGroupChatParticipants,
 } from "@/api/GroupChat/query";
 import {
   useGroupBroadcast,
   useGroupMessageSingle,
   useGroupContext,
-  useEndGroupChat,
 } from "@/api/GroupChat/mutation";
+import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
 import { touchSession } from "@/lib/chatStore";
 
 const ALL = "all";
@@ -42,23 +43,28 @@ const ALL = "all";
 function GroupChatView() {
   const { groupId } = useParams();
 
-  const [messages, setMessages] = useState<GroupMessageT[]>([]);
+  // History is owned by the pager (grows at the front on scroll-up); messages
+  // sent in this session are appended locally at the end.
+  const history = useGroupHistory(groupId);
+  const [liveMessages, setLiveMessages] = useState<GroupMessageT[]>([]);
   const [input, setInput] = useState("");
   const [target, setTarget] = useState<string>(ALL);
   const [ended, setEnded] = useState(false);
   const [assumptions, setAssumptions] = useState<string[]>([]);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
-  const hydratedRef = useRef(false);
 
   const participantsQuery = useGroupChatParticipants(groupId);
-  const historyQuery = useGroupChatHistory(groupId);
   const broadcastMut = useGroupBroadcast(groupId ?? "");
   const singleMut = useGroupMessageSingle(groupId ?? "");
   const contextMut = useGroupContext(groupId ?? "");
-  const endMut = useEndGroupChat(groupId ?? "");
 
   const participants = participantsQuery.data ?? [];
   const sending = broadcastMut.isPending || singleMut.isPending;
+
+  const messages = useMemo(
+    () => [...history.messages, ...liveMessages],
+    [history.messages, liveMessages],
+  );
 
   const colorByName = useMemo(() => {
     const map: Record<string, string> = {};
@@ -68,22 +74,29 @@ function GroupChatView() {
 
   // Reset when navigating between group chats.
   useEffect(() => {
-    hydratedRef.current = false;
-    setMessages([]);
+    setLiveMessages([]);
     setTarget(ALL);
     setEnded(false);
     setAssumptions([]);
   }, [groupId]);
 
-  // Seed transcript from history once.
-  useEffect(() => {
-    if (!historyQuery.data || hydratedRef.current) return;
-    hydratedRef.current = true;
-    setMessages(historyQuery.data);
-  }, [historyQuery.data]);
+  // Scroll-up loads older history while keeping the viewport anchored.
+  const stbRef = useRef<StickToBottomContext | null>(null);
+  const getScrollEl = useCallback(
+    () => stbRef.current?.scrollRef.current ?? null,
+    [],
+  );
+  useLoadOlderOnScroll({
+    getScrollEl,
+    ready: history.ready,
+    hasOlder: history.hasOlder,
+    isLoadingOlder: history.isLoadingOlder,
+    loadOlder: history.loadOlder,
+    signal: history.messages.length,
+  });
 
-  const appendMessages = (next: GroupMessageT[]) =>
-    setMessages((prev) => [...prev, ...next]);
+  const appendLive = (next: GroupMessageT[]) =>
+    setLiveMessages((prev) => [...prev, ...next]);
 
   const handleSendError = (err: Error) => {
     if (/ended/i.test(err.message)) setEnded(true);
@@ -94,16 +107,14 @@ function GroupChatView() {
     if (!text || !groupId || ended || sending) return;
 
     setInput("");
-    appendMessages([
-      { id: crypto.randomUUID(), role: "user", message: text },
-    ]);
+    appendLive([{ id: crypto.randomUUID(), role: "user", message: text }]);
 
     if (target === ALL) {
       broadcastMut.mutate(
         { message: text },
         {
           onSuccess: (data) => {
-            appendMessages(
+            appendLive(
               data.responses.map((r) => ({
                 id: crypto.randomUUID(),
                 role: "persona",
@@ -122,7 +133,7 @@ function GroupChatView() {
         { personaId: target, message: text },
         {
           onSuccess: (data) => {
-            appendMessages([
+            appendLive([
               {
                 id: crypto.randomUUID(),
                 role: "persona",
@@ -136,16 +147,6 @@ function GroupChatView() {
         },
       );
     }
-  };
-
-  const handleEnd = () => {
-    if (!groupId || ended || endMut.isPending) return;
-    endMut.mutate(undefined, {
-      onSuccess: () => {
-        setEnded(true);
-        toast.success("Discussion ended");
-      },
-    });
   };
 
   const handleSaveAssumptions = (next: string[]) => {
@@ -167,7 +168,7 @@ function GroupChatView() {
       ? "Everyone"
       : participants.find((p) => p.persona_id === target)?.persona_name;
 
-  if (participantsQuery.isError || historyQuery.isError) {
+  if (participantsQuery.isError || history.isError) {
     return (
       <div className="flex h-[calc(100vh-90px)] items-center justify-center">
         <ErrorMessage
@@ -212,28 +213,22 @@ function GroupChatView() {
               </span>
             )}
           </Button>
-          {!ended && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleEnd}
-              disabled={endMut.isPending}
-              className="text-muted-foreground hover:text-destructive"
-            >
-              {endMut.isPending ? (
-                <CircularLoader size="sm" />
-              ) : (
-                <Square className="mr-1.5 h-4 w-4" />
-              )}
-              End
-            </Button>
-          )}
         </div>
       </div>
 
-      <ChatContainerRoot className="relative flex-1 space-y-0 overflow-hidden">
+      <ChatContainerRoot
+        contextRef={stbRef}
+        className="relative flex-1 space-y-0 overflow-hidden"
+      >
         <ChatContainerContent className="space-y-8 py-8">
-          {historyQuery.isLoading ? (
+          {/* Top-of-list spinner while older history loads. */}
+          {history.isLoadingOlder && (
+            <div className="flex justify-center py-2">
+              <CircularLoader size="sm" />
+            </div>
+          )}
+
+          {history.isInitialLoading ? (
             <LoadingMessage />
           ) : messages.length === 0 ? (
             <p className="mx-auto w-full max-w-3xl px-10 text-center text-sm text-muted-foreground">

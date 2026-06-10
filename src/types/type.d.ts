@@ -17,6 +17,15 @@ declare type ResponseHeader = {
   message: string;
 };
 
+/** Pagination block shared by the chat-history endpoints (mirrors projects listing). */
+declare type Pagination = {
+  total: number;
+  limit: number;
+  offset: number;
+  total_pages: number;
+  current_page: number;
+};
+
 declare type PersonaProgressT = {
     persona_number: number
     completion: number

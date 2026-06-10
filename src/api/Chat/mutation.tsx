@@ -10,14 +10,20 @@ type BuilderStartResponse = {
   first_message: string;
 };
 
-/** POST /v1/persona/chat/start. */
+/**
+ * Start a builder conversation.
+ *
+ * The old /chat/start endpoint was folded into /chat/message — switched by
+ * `flow: "start"`, which still returns { conversation_id, first_message }.
+ */
 export const useBuilderChatStart = () => {
   const token = getAuthToken();
   return useMutation<BuilderStartResponse, Error, { projectId: string }>({
     mutationKey: ["BuilderChatStart"],
     mutationFn: ({ projectId }) =>
-      postApi<BuilderStartResponse>("persona/chat/start", {
+      postApi<BuilderStartResponse>("persona/chat/message", {
         token,
+        flow: "start",
         project_id: projectId,
       }),
   });
@@ -32,7 +38,7 @@ export type BuilderMessageResponse = {
   persona_progress: PersonaProgressT;
 };
 
-/** POST /v1/persona/chat/message. */
+/** POST /v1/persona/chat/message — a normal builder turn (flow="message"). */
 export const useBuilderChatMessage = (conversationId: string) => {
   const token = getAuthToken();
   return useMutation<BuilderMessageResponse, Error, { message: string }>({
@@ -40,6 +46,7 @@ export const useBuilderChatMessage = (conversationId: string) => {
     mutationFn: ({ message }) =>
       postApi<BuilderMessageResponse>("persona/chat/message", {
         token,
+        flow: "message",
         conversation_id: conversationId,
         message,
       }),

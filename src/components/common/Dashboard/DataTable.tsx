@@ -13,7 +13,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useState } from "react";
 import ColumnDropdown from "./ColumnDropdown";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -23,45 +22,77 @@ import { LayoutGrid, Search, Table as TableIcon } from "lucide-react";
 import ProjectCard from "./projectCard";
 import { cn } from "@/lib/utils";
 import CreateProjectDailog from "./CreateProjectDailog";
+import EditProjectDialog from "./EditProjectDialog";
 import DeleteDialog from "@/components/global/DeleteModal";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "@/redux/store";
 import { setProjectDelete } from "@/redux/GlobalModalSlice";
 import { DeleteProject } from "@/api/Projects/mutation";
+import { useState } from "react";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  /** Controlled search term (server-side). */
+  search: string;
+  onSearchChange: (value: string) => void;
+  /** Zero-based index of the current page. */
+  pageIndex: number;
+  /** Total number of pages reported by the backend. */
+  pageCount: number;
+  /** Total number of rows reported by the backend. */
+  total: number;
+  pageSize: number;
+  onPageChange: (pageIndex: number) => void;
+  /** True while a page/search request is in flight. */
+  isFetching?: boolean;
+}
+
+/** Page indices to render around the current one, capped to `span` buttons. */
+function pageWindow(pageIndex: number, pageCount: number, span = 5): number[] {
+  if (pageCount <= 0) return [];
+  const half = Math.floor(span / 2);
+  let start = Math.max(0, pageIndex - half);
+  const end = Math.min(pageCount - 1, start + span - 1);
+  start = Math.max(0, end - span + 1);
+  const pages: number[] = [];
+  for (let i = start; i <= end; i++) pages.push(i);
+  return pages;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
+  search,
+  onSearchChange,
+  pageIndex,
+  pageCount,
+  total,
+  pageSize,
+  onPageChange,
+  isFetching,
 }: DataTableProps<TData, TValue>) {
   const [content, setContent] = useState<"Table" | "Card">("Table");
-  const [globalFilter, setGlobalFilter] = useState("");
   const { ProjectDelete } = useSelector(
     (state: RootState) => state.GlobalModal,
   );
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: 10,
-  });
   const isMobile = useIsMobile();
   const dispatch = useDispatch<AppDispatch>();
   const { mutate } = DeleteProject();
 
+  // Pagination is server-driven, so react-table is used only to render columns.
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
-    pageCount: 1,
-    state: {
-      pagination,
-    },
-    onPaginationChange: setPagination,
+    pageCount,
   });
+
+  const canPrev = pageIndex > 0;
+  const canNext = pageIndex < pageCount - 1;
+  const from = total === 0 ? 0 : pageIndex * pageSize + 1;
+  const to = Math.min(total, (pageIndex + 1) * pageSize);
 
   return (
     <Tabs
@@ -76,8 +107,8 @@ export function DataTable<TData, TValue>({
           <Search size={18} className="text-[#6B7280] mr-2" />
           <Input
             placeholder="Find the project..."
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="h-10 border-none rounded-none focus-visible:ring-0 px-0 bg-transparent text-[#111827]"
           />
         </div>
@@ -90,14 +121,14 @@ export function DataTable<TData, TValue>({
           <TabsList className="bg-[#F5F6FF] border border-[#E8ECFF] p-1 h-12 rounded-xl">
             <TabsTrigger
               value="Table"
-              className="rounded-lg gap-2 data-[state=active]:bg-white data-[state=active]:text-[#6338F6] data-[state=active]:shadow-sm text-[#4B5563]"
+              className="rounded-lg gap-2 cursor-pointer data-[state=active]:bg-white data-[state=active]:text-[#6338F6] data-[state=active]:shadow-sm text-[#4B5563]"
             >
               <TableIcon size={16} />
               <span className="hidden md:inline">Table</span>
             </TabsTrigger>
             <TabsTrigger
               value="Card"
-              className="rounded-lg gap-2 data-[state=active]:bg-white data-[state=active]:text-[#6338F6] data-[state=active]:shadow-sm text-[#4B5563]"
+              className="rounded-lg gap-2 cursor-pointer data-[state=active]:bg-white data-[state=active]:text-[#6338F6] data-[state=active]:shadow-sm text-[#4B5563]"
             >
               <LayoutGrid size={16} />
               <span className="hidden md:inline">Card</span>
@@ -159,7 +190,7 @@ export function DataTable<TData, TValue>({
                     colSpan={columns.length}
                     className="h-32 text-center text-[#6B7280]"
                   >
-                    No projects found.
+                    {isFetching ? "Loading projects…" : "No projects found."}
                   </TableCell>
                 </TableRow>
               )}
@@ -181,10 +212,14 @@ export function DataTable<TData, TValue>({
         <div className="text-sm text-[#6B7280]">
           {isMobile ? (
             <span>
-              Page {pagination.pageIndex + 1} of {table.getPageCount()}
+              Page {pageIndex + 1} of {Math.max(pageCount, 1)}
             </span>
           ) : (
-            <span>Showing {data.length} strategic projects</span>
+            <span>
+              {total === 0
+                ? "No projects"
+                : `Showing ${from}–${to} of ${total} projects`}
+            </span>
           )}
         </div>
 
@@ -192,25 +227,24 @@ export function DataTable<TData, TValue>({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() => onPageChange(pageIndex - 1)}
+            disabled={!canPrev || isFetching}
             className="rounded-lg px-4 h-10 border-[#ECECEC] text-[#4B5563] hover:text-[#6338F6]"
           >
             Previous
           </Button>
 
           {!isMobile &&
-            Array.from(
-              { length: table.getPageCount() },
-              (_, i) => pagination.pageIndex + i,
-            ).map((num) => (
+            pageWindow(pageIndex, pageCount, 3).map((num) => (
               <Button
                 key={num}
                 size="sm"
-                variant={pagination.pageIndex === num ? "default" : "outline"}
+                variant={pageIndex === num ? "default" : "outline"}
+                onClick={() => onPageChange(num)}
+                disabled={isFetching}
                 className={cn(
                   "w-10 h-10 rounded-lg font-medium transition-all",
-                  pagination.pageIndex === num
+                  pageIndex === num
                     ? "bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white shadow-md shadow-[#6338F6]/10"
                     : "border-[#ECECEC] text-[#4B5563] hover:bg-[#F5F6FF]",
                 )}
@@ -222,8 +256,8 @@ export function DataTable<TData, TValue>({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => onPageChange(pageIndex + 1)}
+            disabled={!canNext || isFetching}
             className="rounded-lg px-4 h-10 border-[#ECECEC] text-[#4B5563] hover:text-[#6338F6]"
           >
             Next
@@ -235,6 +269,7 @@ export function DataTable<TData, TValue>({
         setOpen={() => dispatch(setProjectDelete(null))}
         onClick={() => mutate({ project_id: ProjectDelete as string })}
       />
+      <EditProjectDialog />
     </Tabs>
   );
 }

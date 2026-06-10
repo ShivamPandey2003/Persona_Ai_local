@@ -1,9 +1,11 @@
 import { cn } from "@/lib/utils"
-import { StickToBottom } from "use-stick-to-bottom"
+import { StickToBottom, type StickToBottomContext } from "use-stick-to-bottom"
 
 export type ChatContainerRootProps = {
   children: React.ReactNode
   className?: string
+  /** Exposes StickToBottom's context (incl. scrollRef) to the parent. */
+  contextRef?: React.Ref<StickToBottomContext>
 } & React.HTMLAttributes<HTMLDivElement>
 
 export type ChatContainerContentProps = {
@@ -19,6 +21,7 @@ export type ChatContainerScrollAnchorProps = {
 function ChatContainerRoot({
   children,
   className,
+  contextRef,
   ...props
 }: ChatContainerRootProps) {
   return (
@@ -27,6 +30,7 @@ function ChatContainerRoot({
       resize="smooth"
       initial="instant"
       role="log"
+      contextRef={contextRef}
       {...props}
     >
       {children}

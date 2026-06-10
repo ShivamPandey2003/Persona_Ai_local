@@ -100,9 +100,8 @@ const Column: ColumnDef<Project, any>[] = [
      id: "Actions",
      header:"Actions",
      cell:({row})=>{
-        const ProjectId = row.original.project_id;
         return (
-            <Dropdown selectedId={ProjectId}/>
+            <Dropdown project={row.original}/>
         )
      }
   }
