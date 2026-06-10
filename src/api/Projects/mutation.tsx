@@ -55,6 +55,50 @@ export const CreateProject = (cb:()=>void) => {
   return createProject;
 };
 
+type UpdateProjectPayload = {
+  project_id: string;
+  project_name: string;
+  description?: string;
+};
+
+type UpdateProjectRes = {
+  header: ResponseHeader;
+  response: Record<string, never>;
+};
+
+/**
+ * POST /v1/projects/update — edit a project's name/description.
+ *
+ * `status` is intentionally omitted from the payload (not user-editable here).
+ * On success the project listing is refreshed via the ["ProjectList"] prefix.
+ */
+export const UpdateProject = (cb: () => void) => {
+  const updateProject = useMutation<
+    UpdateProjectRes,
+    Record<string, any>,
+    UpdateProjectPayload
+  >({
+    mutationKey: ["UpdateProject"],
+    mutationFn: async (payload) => {
+      const userStr = localStorage.getItem("user");
+      const userData = userStr ? JSON.parse(atob(userStr)) : null;
+      const token = userData?.token || "";
+
+      const res = await apiRequest("post", "projects/update", {
+        token,
+        ...payload,
+      });
+      return await res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ProjectList"] });
+      cb();
+    },
+  });
+
+  return updateProject;
+};
+
 type DeleteProjectPayload = {
   project_id: string;
 };

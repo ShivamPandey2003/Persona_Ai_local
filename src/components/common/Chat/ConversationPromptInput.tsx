@@ -2,10 +2,11 @@ import {
   ChatContainerContent,
   ChatContainerRoot,
 } from "@/components/ui/chat-container";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useDispatch } from "react-redux";
 import { Sparkles } from "lucide-react";
+import type { StickToBottomContext } from "use-stick-to-bottom";
 
 import { MessageComponent } from "./Message";
 import LoadingMessage from "./LoadingMessage";
@@ -14,10 +15,11 @@ import ChatComposer from "./ChatComposer";
 import { Button } from "@/components/ui/button";
 import { CircularLoader } from "@/components/ui/loader";
 
-import { useBuilderChatHistory } from "@/api/Chat/query";
+import { useBuilderHistory } from "@/api/Chat/query";
 import { useBuilderChatMessage, useBuilderChatEnd } from "@/api/Chat/mutation";
 import { usePersonaGenerate } from "@/api/Persona/mutation";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
+import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
 import { touchSession } from "@/lib/chatStore";
 import { setPersonaDialog } from "@/redux/ProjectSlice";
 import type { AppDispatch } from "@/redux/store";
@@ -30,44 +32,56 @@ function snippet(text: string, words = 6): string {
 /**
  * Persona-builder conversation (route /chat/:id).
  *
- * Rehydrates the transcript from history and lets the user keep describing
- * personas. "End & View Personas" closes the conversation, generates personas
- * for the project (dummy data; idempotent), and opens the persona panel. The
- * conversation is always created upstream by ChatEntry, so this view never
- * starts one itself.
+ * Rehydrates the transcript from history (newest window first, older windows
+ * loaded on scroll-up) and lets the user keep describing personas. "End & View
+ * Personas" closes the conversation, generates personas for the project (dummy
+ * data; idempotent), and opens the persona panel. The conversation is always
+ * created upstream by ChatEntry, so this view never starts one itself.
  */
 function ConversationPromptInput() {
   const { id: conversationId } = useParams();
   const projectId = useActiveProjectId();
   const dispatch = useDispatch<AppDispatch>();
 
-  const [messages, setMessages] = useState<MessageT[]>([]);
+  // History is owned by the pager (grows at the front on scroll-up); messages
+  // sent in this session are appended locally at the end.
+  const history = useBuilderHistory(conversationId);
+  const [liveMessages, setLiveMessages] = useState<MessageT[]>([]);
   const [input, setInput] = useState("");
   const [progress, setProgress] = useState<PersonaProgressT | null>(null);
   const [ended, setEnded] = useState(false);
   const [finishing, setFinishing] = useState(false);
 
-  const hydratedRef = useRef(false);
-
-  const historyQuery = useBuilderChatHistory(conversationId);
   const messageMut = useBuilderChatMessage(conversationId ?? "");
   const endMut = useBuilderChatEnd(conversationId ?? "");
   const generateMut = usePersonaGenerate();
 
+  const messages = useMemo(
+    () => [...history.messages, ...liveMessages],
+    [history.messages, liveMessages],
+  );
+
   // Reset local state when switching between conversations.
   useEffect(() => {
-    hydratedRef.current = false;
-    setMessages([]);
+    setLiveMessages([]);
     setProgress(null);
     setEnded(false);
   }, [conversationId]);
 
-  // Seed the transcript from history once per conversation.
-  useEffect(() => {
-    if (!historyQuery.data || hydratedRef.current) return;
-    hydratedRef.current = true;
-    setMessages(historyQuery.data);
-  }, [historyQuery.data]);
+  // Scroll-up loads older history while keeping the viewport anchored.
+  const stbRef = useRef<StickToBottomContext | null>(null);
+  const getScrollEl = useCallback(
+    () => stbRef.current?.scrollRef.current ?? null,
+    [],
+  );
+  useLoadOlderOnScroll({
+    getScrollEl,
+    ready: history.ready,
+    hasOlder: history.hasOlder,
+    isLoadingOlder: history.isLoadingOlder,
+    loadOlder: history.loadOlder,
+    signal: history.messages.length,
+  });
 
   const handleSend = () => {
     const text = input.trim();
@@ -75,7 +89,7 @@ function ConversationPromptInput() {
 
     const isFirstUserMessage = !messages.some((m) => m.userType === "User");
     setInput("");
-    setMessages((prev) => [
+    setLiveMessages((prev) => [
       ...prev,
       { id: crypto.randomUUID(), userType: "User", message: text },
     ]);
@@ -84,7 +98,7 @@ function ConversationPromptInput() {
       { message: text },
       {
         onSuccess: (data) => {
-          setMessages((prev) => [
+          setLiveMessages((prev) => [
             ...prev,
             {
               id: crypto.randomUUID(),
@@ -140,7 +154,6 @@ function ConversationPromptInput() {
     }
   };
 
-  const isHistoryLoading = historyQuery.isLoading;
   const completion = progress?.completion ?? 0;
 
   return (
@@ -185,8 +198,18 @@ function ConversationPromptInput() {
         </Button>
       </div>
 
-      <ChatContainerRoot className="relative flex-1 space-y-0 overflow-hidden">
+      <ChatContainerRoot
+        contextRef={stbRef}
+        className="relative flex-1 space-y-0 overflow-hidden"
+      >
         <ChatContainerContent className="space-y-12 py-8">
+          {/* Top-of-list spinner while older history loads. */}
+          {history.isLoadingOlder && (
+            <div className="flex justify-center py-2">
+              <CircularLoader size="sm" />
+            </div>
+          )}
+
           {messages.map((message, index) => (
             <MessageComponent
               key={message.id}
@@ -195,8 +218,8 @@ function ConversationPromptInput() {
             />
           ))}
 
-          {(isHistoryLoading || messageMut.isPending) && <LoadingMessage />}
-          {historyQuery.isError && (
+          {(history.isInitialLoading || messageMut.isPending) && <LoadingMessage />}
+          {history.isError && (
             <ErrorMessage
               error={{
                 name: "HistoryError",

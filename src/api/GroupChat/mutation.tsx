@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { getAuthToken, postApi } from "@/lib/api";
 import { upsertSession } from "@/lib/chatStore";
+import { queryClient } from "@/provider";
 
 /* ------------------------------------------------------------------ */
 /* Start a group chat                                                 */
@@ -20,7 +21,10 @@ type StartGroupChatResponse = {
 };
 
 /**
- * POST /v1/persona/group-chat/start.
+ * Start a group chat.
+ *
+ * The old /group-chat/start endpoint was folded into /group-chat/message —
+ * switched by `flow: "start"`, which still returns { group_id, message }.
  *
  * Works for both a single persona and many — group chat is the only chat path
  * to a persona. On success it persists a Recents session and navigates to the
@@ -33,8 +37,9 @@ export const useStartGroupChat = () => {
   return useMutation<StartGroupChatResponse, Error, StartGroupChatArgs>({
     mutationKey: ["StartGroupChat"],
     mutationFn: ({ projectId, personaIds }) =>
-      postApi<StartGroupChatResponse>("persona/group-chat/start", {
+      postApi<StartGroupChatResponse>("persona/group-chat/message", {
         token,
+        flow: "start",
         project_id: projectId,
         persona_ids: personaIds,
       }),
@@ -46,6 +51,8 @@ export const useStartGroupChat = () => {
         title: vars.title,
         personaIds: vars.personaIds,
       });
+      // Surface the new group in the sidebar Recents (sourced from chat-list).
+      queryClient.invalidateQueries({ queryKey: ["ChatList", vars.projectId] });
       navigate(`/group-chat/${data.group_id}`, {
         state: { projectId: vars.projectId },
       });
@@ -68,7 +75,7 @@ type BroadcastResponse = {
   responses: PersonaBroadcastReply[];
 };
 
-/** POST /v1/persona/group-chat/message — every persona replies. */
+/** POST /v1/persona/group-chat/message (flow="message") — every persona replies. */
 export const useGroupBroadcast = (groupId: string) => {
   const token = getAuthToken();
   return useMutation<BroadcastResponse, Error, { message: string }>({
@@ -76,6 +83,7 @@ export const useGroupBroadcast = (groupId: string) => {
     mutationFn: ({ message }) =>
       postApi<BroadcastResponse>("persona/group-chat/message", {
         token,
+        flow: "message",
         group_id: groupId,
         message,
       }),
@@ -126,23 +134,6 @@ export const useGroupContext = (groupId: string) => {
         token,
         group_id: groupId,
         assumptions,
-      }),
-  });
-};
-
-/* ------------------------------------------------------------------ */
-/* End the group chat                                                 */
-/* ------------------------------------------------------------------ */
-
-/** POST /v1/persona/group-chat/end. */
-export const useEndGroupChat = (groupId: string) => {
-  const token = getAuthToken();
-  return useMutation<Record<string, never>, Error, void>({
-    mutationKey: ["EndGroupChat", groupId],
-    mutationFn: () =>
-      postApi<Record<string, never>>("persona/group-chat/end", {
-        token,
-        group_id: groupId,
       }),
   });
 };

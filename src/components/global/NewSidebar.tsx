@@ -19,9 +19,8 @@ import { cn } from "@/lib/utils";
 import { setPersonaDialog } from "@/redux/ProjectSlice";
 import { useDispatch } from "react-redux";
 import type { AppDispatch } from "@/redux/store";
-import { useMemo } from "react";
 import { ScrollArea } from "../ui/scroll-area";
-import { listSessions } from "@/lib/chatStore";
+import { useChatList } from "@/api/Chat/query";
 import { useActiveProjectId, chatIdFromPath } from "@/hooks/useActiveProjectId";
 
 const items = [
@@ -40,12 +39,10 @@ export function NewAppSidebar() {
   const inChat = pathname.includes("/chat") || pathname.includes("/group-chat");
   const activeId = chatIdFromPath(pathname);
 
-  // Recents are persisted locally (the backend has no list-conversations API).
-  // Recompute on navigation so a freshly started chat appears.
-  const sessions = useMemo(
-    () => listSessions(projectId),
-    [projectId, pathname, activeId],
-  );
+  // Recents come from the backend chat-list (the source of truth across reloads
+  // and devices); freshly started chats appear once their start call invalidates
+  // the ["ChatList", projectId] query.
+  const { data: sessions = [], isLoading } = useChatList(projectId);
 
   const startNewChat = () => {
     if (!projectId) return;
@@ -59,7 +56,7 @@ export function NewAppSidebar() {
       className="border-r border-[#E5E7EB] font-sans"
     >
       {/* HEADER: Logo & Brand */}
-      <SidebarHeader className="py-4 px-3 transition-all">
+      <SidebarHeader className="px-3 transition-all">
         <div
           className={cn(
             "flex items-center gap-2.5 px-1 select-none cursor-pointer transition-all",
@@ -77,7 +74,7 @@ export function NewAppSidebar() {
       </SidebarHeader>
 
       {/* CONTENT: Core Navigation Options */}
-      <SidebarContent className="px-2 bg-linear-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] space-y-4">
+      <SidebarContent className="px-2 space-y-4">
         <SidebarGroup className="p-0">
           <SidebarGroupLabel className="px-3 text-xs font-semibold text-[#6B7280] tracking-wider mb-2 group-data-[collapsible=icon]:hidden">
             Navigation
@@ -156,15 +153,13 @@ export function NewAppSidebar() {
             <span className="text-xs font-semibold text-[#6B7280] tracking-wider block mb-2">
               Recents
             </span>
-            {sessions.length ? (
+            {isLoading ? (
+              <p className="text-xs text-[#9CA3AF] px-1 italic">Loading…</p>
+            ) : sessions.length ? (
               <ScrollArea className="flex-1 overflow-hidden">
                 <SidebarMenu>
                   {sessions.map((session) => {
                     const Icon = session.kind === "group" ? Users : MessageSquare;
-                    const to =
-                      session.kind === "group"
-                        ? `/group-chat/${session.id}`
-                        : `/chat/${session.id}`;
                     return (
                       <SidebarMenuItem key={session.id}>
                         <SidebarMenuButton
@@ -173,7 +168,7 @@ export function NewAppSidebar() {
                           className="data-active:bg-primary! data-active:text-white"
                         >
                           <Link
-                            to={to}
+                            to={session.to}
                             state={{ projectId: session.projectId }}
                             title={session.title}
                           >
