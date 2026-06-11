@@ -5,23 +5,57 @@ import { getAuthToken, postApi } from "@/lib/api";
 /* Start a persona-builder conversation                               */
 /* ------------------------------------------------------------------ */
 
-type BuilderStartResponse = {
-  conversation_id: string;
-  first_message: string;
+/** One message in a builder turn (backend shape: { role, content }). */
+export type BuilderChatMessageT = {
+  role: string;
+  content: string;
+};
+
+/** A single built persona — one entry of final_result.personas. */
+export type BuilderPersona = {
+  persona_index: number | null;
+  industry: string | null;
+  category: string | null;
+  sub_category_id: string | null;
+  micro_category: string[] | null;
+  construct_ids: string[] | null;
+  role_type_ids: string[] | null;
+  timeframe_ids: string[] | null;
+  entity_scope_ids: string[] | null;
+  theme_ids: string[] | null;
+  profile_ids: string[] | null;
+  demographics: Record<string, string | null> | null;
+};
+
+/** Personas produced once requirements are complete; null until then. */
+export type BuilderFinalResult = { personas: BuilderPersona[] } | null;
+
+/**
+ * Unified response of POST /v1/persona/chat/message, returned for both
+ * flow="start" and flow="message":
+ *   - id           : conversation_id (route / persist the session with it)
+ *   - messages     : the assistant's reply for this turn ({ role, content })
+ *   - final_result : built personas once the agent finishes, else null
+ */
+export type BuilderChatTurnResponse = {
+  id: string;
+  messages: BuilderChatMessageT[];
+  final_result: BuilderFinalResult;
 };
 
 /**
- * Start a builder conversation.
+ * Start a builder conversation (flow="start").
  *
- * The old /chat/start endpoint was folded into /chat/message — switched by
- * `flow: "start"`, which still returns { conversation_id, first_message }.
+ * The old /chat/start endpoint was folded into /chat/message. The opening
+ * assistant question arrives in `messages`; `final_result` is null on the
+ * opening turn.
  */
 export const useBuilderChatStart = () => {
   const token = getAuthToken();
-  return useMutation<BuilderStartResponse, Error, { projectId: string }>({
+  return useMutation<BuilderChatTurnResponse, Error, { projectId: string }>({
     mutationKey: ["BuilderChatStart"],
     mutationFn: ({ projectId }) =>
-      postApi<BuilderStartResponse>("persona/chat/message", {
+      postApi<BuilderChatTurnResponse>("persona/chat/message", {
         token,
         flow: "start",
         project_id: projectId,
@@ -33,39 +67,17 @@ export const useBuilderChatStart = () => {
 /* Send a message in a builder conversation                           */
 /* ------------------------------------------------------------------ */
 
-export type BuilderMessageResponse = {
-  assistant_message: string;
-  persona_progress: PersonaProgressT;
-};
-
 /** POST /v1/persona/chat/message — a normal builder turn (flow="message"). */
 export const useBuilderChatMessage = (conversationId: string) => {
   const token = getAuthToken();
-  return useMutation<BuilderMessageResponse, Error, { message: string }>({
+  return useMutation<BuilderChatTurnResponse, Error, { message: string }>({
     mutationKey: ["BuilderChatMessage", conversationId],
     mutationFn: ({ message }) =>
-      postApi<BuilderMessageResponse>("persona/chat/message", {
+      postApi<BuilderChatTurnResponse>("persona/chat/message", {
         token,
         flow: "message",
         conversation_id: conversationId,
         message,
-      }),
-  });
-};
-
-/* ------------------------------------------------------------------ */
-/* End a builder conversation                                         */
-/* ------------------------------------------------------------------ */
-
-/** POST /v1/persona/chat/end. */
-export const useBuilderChatEnd = (conversationId: string) => {
-  const token = getAuthToken();
-  return useMutation<Record<string, never>, Error, void>({
-    mutationKey: ["BuilderChatEnd", conversationId],
-    mutationFn: () =>
-      postApi<Record<string, never>>("persona/chat/end", {
-        token,
-        conversation_id: conversationId,
       }),
   });
 };

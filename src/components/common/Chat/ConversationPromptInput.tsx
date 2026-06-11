@@ -5,7 +5,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useDispatch } from "react-redux";
-import { Sparkles } from "lucide-react";
+import { Users } from "lucide-react";
 import type { StickToBottomContext } from "use-stick-to-bottom";
 
 import { MessageComponent } from "./Message";
@@ -16,8 +16,7 @@ import { Button } from "@/components/ui/button";
 import { CircularLoader } from "@/components/ui/loader";
 
 import { useBuilderHistory } from "@/api/Chat/query";
-import { useBuilderChatMessage, useBuilderChatEnd } from "@/api/Chat/mutation";
-import { usePersonaGenerate } from "@/api/Persona/mutation";
+import { useBuilderChatMessage } from "@/api/Chat/mutation";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
 import { touchSession } from "@/lib/chatStore";
@@ -48,13 +47,11 @@ function ConversationPromptInput() {
   const history = useBuilderHistory(conversationId);
   const [liveMessages, setLiveMessages] = useState<MessageT[]>([]);
   const [input, setInput] = useState("");
-  const [progress, setProgress] = useState<PersonaProgressT | null>(null);
+  // Set once the agent returns final_result: personas are built and the backend
+  // has closed the conversation, so no further messages are accepted.
   const [ended, setEnded] = useState(false);
-  const [finishing, setFinishing] = useState(false);
 
   const messageMut = useBuilderChatMessage(conversationId ?? "");
-  const endMut = useBuilderChatEnd(conversationId ?? "");
-  const generateMut = usePersonaGenerate();
 
   const messages = useMemo(
     () => [...history.messages, ...liveMessages],
@@ -64,7 +61,6 @@ function ConversationPromptInput() {
   // Reset local state when switching between conversations.
   useEffect(() => {
     setLiveMessages([]);
-    setProgress(null);
     setEnded(false);
   }, [conversationId]);
 
@@ -82,6 +78,22 @@ function ConversationPromptInput() {
     loadOlder: history.loadOlder,
     signal: history.messages.length,
   });
+
+  const openPersonaPanel = () => dispatch(setPersonaDialog(true));
+
+  // Once the agent returns final_result, the personas are built and the backend
+  // has already closed the conversation. Reflect that locally, refresh the
+  // persona panel queries, and open the panel automatically — there is no
+  // manual "end" step.
+  const finishConversation = () => {
+    setEnded(true);
+    if (conversationId) touchSession(conversationId, { ended: true });
+    if (projectId) {
+      queryClient.invalidateQueries({ queryKey: ["PersonaList", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["PersonaDashboard", projectId] });
+    }
+    openPersonaPanel();
+  };
 
   const handleSend = () => {
     const text = input.trim();
@@ -103,14 +115,14 @@ function ConversationPromptInput() {
             {
               id: crypto.randomUUID(),
               userType: "Assistant",
-              message: data.assistant_message,
-              persona_progress: data.persona_progress,
+              message: data.messages?.[0]?.content ?? "",
             },
           ]);
-          setProgress(data.persona_progress);
           touchSession(conversationId, {
             title: isFirstUserMessage ? snippet(text) : undefined,
           });
+          // final_result present => build complete: auto-end + show personas.
+          if (data.final_result) finishConversation();
         },
         onError: (err) => {
           if (/ended/i.test(err.message)) setEnded(true);
@@ -119,82 +131,22 @@ function ConversationPromptInput() {
     );
   };
 
-  const openPersonaPanel = () => dispatch(setPersonaDialog(true));
-
-  // End the builder chat, ensure the project has personas (generates a dummy
-  // set on first run; idempotent thereafter), refresh the panel queries, then
-  // open the persona panel so the user can start single/group chats.
-  const handleEnd = async () => {
-    if (finishing) return;
-    setFinishing(true);
-    try {
-      if (conversationId && !ended) {
-        try {
-          await endMut.mutateAsync();
-        } catch {
-          // Ending may fail if already ended — proceed to personas regardless.
-        }
-        setEnded(true);
-        touchSession(conversationId, { ended: true });
-      }
-
-      if (projectId) {
-        try {
-          await generateMut.mutateAsync({ projectId });
-        } catch {
-          // Generation errors are surfaced via toast; still open the panel.
-        }
-        queryClient.invalidateQueries({ queryKey: ["PersonaList", projectId] });
-        queryClient.invalidateQueries({ queryKey: ["PersonaDashboard", projectId] });
-      }
-
-      openPersonaPanel();
-    } finally {
-      setFinishing(false);
-    }
-  };
-
-  const completion = progress?.completion ?? 0;
-
   return (
     <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden">
-      {/* Toolbar: progress + end */}
+      {/* Toolbar: status + a shortcut to the personas dashboard. Personas also
+          open automatically once the build completes. */}
       <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center justify-between gap-4 px-4 py-2">
-        {progress ? (
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className="shrink-0 text-xs font-medium text-muted-foreground">
-              Persona {progress.persona_number}
-            </span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${completion}%` }}
-              />
-            </div>
-            <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
-              {completion}%
-            </span>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">Persona Builder</span>
-        )}
+        <span className="text-xs font-medium text-muted-foreground">
+          {ended ? "Personas ready" : "Persona Builder"}
+        </span>
         <Button
           size="sm"
-          variant={completion >= 100 ? "default" : "outline"}
-          onClick={handleEnd}
-          disabled={finishing}
+          variant="outline"
+          onClick={openPersonaPanel}
           className="shrink-0"
         >
-          {finishing ? (
-            <CircularLoader size="sm" />
-          ) : (
-            <Sparkles className="mr-1.5 h-4 w-4" />
-          )}
-          {finishing
-            ? "Generating personas…"
-            : ended
-              ? "View Personas"
-              : "End & View Personas"}
+          <Users className="mr-1.5 h-4 w-4" />
+          View Personas
         </Button>
       </div>
 

@@ -26,16 +26,10 @@ declare type Pagination = {
   current_page: number;
 };
 
-declare type PersonaProgressT = {
-    persona_number: number
-    completion: number
-}
-
 declare type MessageT = {
     id: string;
     message: string;
     userType: "User" | "Assistant"
-    persona_progress?: PersonaProgressT
 }
 
 /** User LLM/AI settings (POST /v1/setting/get|save|reset). */
@@ -50,13 +44,37 @@ declare type AppSettings = {
     auto_expand_details: boolean;
 }
 
+/** Demographics block produced by the persona-builder agent. */
+declare type PersonaDemographics = {
+    age_group?: string | null;
+    gender?: string | null;
+    ethnicity?: string | null;
+    income?: string | null;
+    marital_status?: string | null;
+    country?: string | null;
+    primary_shopper_household?: string | null;
+}
+
 /** A persona as returned by POST /v1/persona/list. */
 declare type PersonaListItem = {
     persona_id: string;
-    persona_name: string;
+    persona_name: string | null;
     coverage: number;
     confidence: string;
     status: string;
+    // Persona-builder agent output (null for data-file generated personas).
+    persona_index?: number | null;
+    industry?: string | null;
+    category?: string | null;
+    sub_category_id?: string | null;
+    micro_category?: string[] | null;
+    construct_ids?: string[] | null;
+    role_type_ids?: string[] | null;
+    timeframe_ids?: string[] | null;
+    entity_scope_ids?: string[] | null;
+    theme_ids?: string[] | null;
+    profile_ids?: string[] | null;
+    demographics?: PersonaDemographics | null;
 }
 
 /** A participant of a group chat (POST /v1/persona/group-chat/participants). */
