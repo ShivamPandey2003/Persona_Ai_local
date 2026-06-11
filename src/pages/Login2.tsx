@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Brain,
+  Loader,
 } from "lucide-react";
 import { useState, type MouseEvent } from "react";
 // import { useNavigate } from "react-router";
@@ -20,18 +21,17 @@ export default function PersonaAILoginPage() {
       password: "",
     },
   );
-  const {mutate} = Login();
-
+  const { mutate, isPending } = Login();
 
   const OnSubmit = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
 
     const payload = {
       email: aesEncrypt(userCred.email),
-      password: aesEncrypt(userCred.password)
-    }
+      password: aesEncrypt(userCred.password),
+    };
 
-    mutate(payload)
+    mutate(payload);
   };
 
   return (
@@ -179,6 +179,7 @@ export default function PersonaAILoginPage() {
                           email: e.target.value,
                         }))
                       }
+                      disabled={isPending}
                       type="email"
                       placeholder="Enter your email"
                       className="w-full h-14 rounded-2xl bg-[#F8F9FB] border border-[#ECECEC] pl-14 pr-5 outline-none focus:border-[#6338F6] transition-all"
@@ -206,6 +207,7 @@ export default function PersonaAILoginPage() {
                           password: e.target.value,
                         }))
                       }
+                      disabled={isPending}
                       type="password"
                       placeholder="Enter your password"
                       className="w-full h-14 rounded-2xl bg-[#F8F9FB] border border-[#ECECEC] pl-14 pr-5 outline-none focus:border-[#6338F6] transition-all"
@@ -229,11 +231,22 @@ export default function PersonaAILoginPage() {
                 </div>
 
                 {/* LOGIN BUTTON */}
-                <button onClick={OnSubmit} className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white font-medium shadow-[0_15px_35px_rgba(99,56,246,0.35)] hover:scale-[1.01] transition-all duration-300">
-                  <span className="flex items-center justify-center gap-2">
-                    Sign In
-                    <ArrowRight size={18} />
-                  </span>
+                <button
+                  onClick={OnSubmit}
+                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white font-medium shadow-[0_15px_35px_rgba(99,56,246,0.35)] hover:scale-[1.01] transition-all duration-300"
+                  disabled={isPending}
+                >
+                  {isPending ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader className="animate-spin" size={18} />
+                      Verifying ...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      Sign In
+                      <ArrowRight size={18} />
+                    </span>
+                  )}
                 </button>
 
                 {/* DIVIDER */}

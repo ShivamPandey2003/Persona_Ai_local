@@ -321,6 +321,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                         </div>
                       </div>
                       <Checkbox
+                      className="border border-gray-200 shadow"
                         checked={isSelected}
                         onCheckedChange={() => toggle(persona.persona_id)}
                         aria-label={`Select ${persona.persona_name ?? "persona"}`}
