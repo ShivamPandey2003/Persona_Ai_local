@@ -56,12 +56,14 @@ export function personaColorStyle(color: string | undefined): PersonaColorStyle 
   return COLOR_STYLES[color.toLowerCase()] ?? FALLBACK;
 }
 
-export function personaInitials(name: string): string {
-  return name
+export function personaInitials(name: string | null | undefined): string {
+  if (!name) return "P";
+  const initials = name
     .split(/\s+/)
     .filter(Boolean)
     .map((w) => w[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
+  return initials || "P";
 }

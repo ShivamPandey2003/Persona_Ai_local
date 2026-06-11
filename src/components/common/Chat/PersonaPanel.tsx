@@ -32,6 +32,151 @@ function groupTitle(names: string[]): string {
   return names.length > 3 ? `${head} +${names.length - 3}` : head;
 }
 
+/**
+ * Humanise a taxonomy id for display:
+ *   "brand.equity_positioning" -> "Equity Positioning"
+ *   "digital_tools_services"   -> "Digital Tools Services"
+ */
+function humanizeToken(raw: string): string {
+  const tail = raw.includes(".") ? raw.slice(raw.indexOf(".") + 1) : raw;
+  return tail
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/** Demographic keys -> display labels, in render order. */
+const DEMOGRAPHIC_LABELS: Array<[keyof PersonaDemographics, string]> = [
+  ["age_group", "Age"],
+  ["gender", "Gender"],
+  ["income", "Income"],
+  ["country", "Country"],
+  ["ethnicity", "Ethnicity"],
+  ["marital_status", "Marital status"],
+  ["primary_shopper_household", "Primary shopper"],
+];
+
+/** Non-empty demographic [label, value] pairs for a persona. */
+function demographicEntries(data?: PersonaDemographics | null): Array<[string, string]> {
+  if (!data) return [];
+  return DEMOGRAPHIC_LABELS.map(
+    ([key, label]) => [label, data[key]] as [string, string | null | undefined],
+  ).filter((e): e is [string, string] => e[1] != null && e[1] !== "");
+}
+
+/** A labelled row of chips, hidden when there are no items. */
+function DetailChips({ label, items }: { label: string; items?: string[] | null }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item) => (
+          <span
+            key={item}
+            className="rounded-md bg-secondary px-2 py-0.5 text-xs text-foreground"
+          >
+            {humanizeToken(item)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * True when a persona came from the persona-builder agent (vs. data-file
+ * generation). Builder personas have no meaningful coverage/confidence, so
+ * those columns are hidden for them.
+ */
+function isBuilderPersona(p: PersonaListItem): boolean {
+  return (
+    p.persona_index != null ||
+    Boolean(p.industry || p.category || p.sub_category_id || p.demographics) ||
+    [
+      p.micro_category,
+      p.theme_ids,
+      p.construct_ids,
+      p.role_type_ids,
+      p.timeframe_ids,
+      p.entity_scope_ids,
+      p.profile_ids,
+    ].some((a) => a != null && a.length > 0)
+  );
+}
+
+/**
+ * All persona-builder details for one card: taxonomy, demographics, and the
+ * mapped construct/theme/role/timeframe/scope/profile ids. Renders nothing for
+ * personas without builder output (e.g. data-file generated personas).
+ */
+function PersonaDetails({ persona }: { persona: PersonaListItem }) {
+  const taxonomy = [
+    persona.industry ? (["Industry", humanizeToken(persona.industry)] as const) : null,
+    persona.category ? (["Category", humanizeToken(persona.category)] as const) : null,
+    persona.sub_category_id
+      ? (["Sub-category", humanizeToken(persona.sub_category_id)] as const)
+      : null,
+  ].filter(Boolean) as Array<readonly [string, string]>;
+
+  const demographics = demographicEntries(persona.demographics);
+
+  const chipGroups: Array<[string, string[] | null | undefined]> = [
+    ["Micro-categories", persona.micro_category],
+    ["Themes", persona.theme_ids],
+    ["Constructs", persona.construct_ids],
+    ["Roles", persona.role_type_ids],
+    ["Timeframes", persona.timeframe_ids],
+    ["Entity scope", persona.entity_scope_ids],
+    ["Profile fields", persona.profile_ids],
+  ];
+
+  const hasChips = chipGroups.some(([, items]) => items && items.length > 0);
+  if (taxonomy.length === 0 && demographics.length === 0 && !hasChips) return null;
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-3">
+      {taxonomy.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {taxonomy.map(([label, value]) => (
+            <div key={label} className="flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
+                {label}
+              </span>
+              <span className="truncate text-right text-xs font-medium text-foreground">
+                {value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {demographics.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Demographics
+          </p>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {demographics.map(([label, value]) => (
+              <div key={label} className="flex flex-col">
+                <dt className="text-[11px] text-muted-foreground">{label}</dt>
+                <dd className="text-xs font-medium text-foreground">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {chipGroups.map(([label, items]) => (
+        <DetailChips key={label} label={label} items={items} />
+      ))}
+    </div>
+  );
+}
+
 function SummaryCard({
   icon,
   value,
@@ -168,7 +313,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold leading-snug text-foreground">
-                            {persona.persona_name}
+                            {persona.persona_name ?? "Untitled persona"}
                           </p>
                           <p className="mt-0.5 text-xs capitalize text-muted-foreground">
                             {persona.status}
@@ -178,37 +323,41 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggle(persona.persona_id)}
-                        aria-label={`Select ${persona.persona_name}`}
+                        aria-label={`Select ${persona.persona_name ?? "persona"}`}
                       />
                     </div>
 
-                    <div>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Coverage
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={cn("shrink-0", confidenceColors[persona.confidence])}
-                        >
-                          {persona.confidence}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 flex-1 rounded-full bg-secondary">
-                          <div
-                            className={cn(
-                              "h-2 rounded-full transition-all",
-                              coverageColor(persona.coverage),
-                            )}
-                            style={{ width: `${persona.coverage}%` }}
-                          />
+                    {!isBuilderPersona(persona) && (
+                      <div>
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Coverage
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={cn("shrink-0", confidenceColors[persona.confidence])}
+                          >
+                            {persona.confidence}
+                          </Badge>
                         </div>
-                        <span className="text-xs font-semibold tabular-nums text-foreground">
-                          {persona.coverage}%
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 flex-1 rounded-full bg-secondary">
+                            <div
+                              className={cn(
+                                "h-2 rounded-full transition-all",
+                                coverageColor(persona.coverage),
+                              )}
+                              style={{ width: `${persona.coverage}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold tabular-nums text-foreground">
+                            {persona.coverage}%
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    <PersonaDetails persona={persona} />
 
                     <div className="mt-auto pt-1">
                       <Button
@@ -219,7 +368,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                         onClick={() =>
                           startChat(
                             [persona.persona_id],
-                            persona.persona_name,
+                            persona.persona_name ?? "Persona",
                             persona.persona_id,
                           )
                         }
@@ -251,7 +400,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
           onClick={() =>
             startChat(
               selectedPersonas.map((p) => p.persona_id),
-              groupTitle(selectedPersonas.map((p) => p.persona_name)),
+              groupTitle(selectedPersonas.map((p) => p.persona_name ?? "Persona")),
               "group",
             )
           }

@@ -22,7 +22,7 @@ export default function PersonaAILandingPage() {
           <Header/>
         {/* HERO */}
         <section className="px-8 md:px-14 pt-10 pb-14">
-          <p className="text-[#6B7280] mb-4">Future Intelligence Platform 👋</p>
+          <p className="text-[#6B7280] mb-4">Future Intelligence Platform</p>
 
           <h2 className="text-4xl md:text-6xl font-semibold leading-[1.1] tracking-[-2px] text-[#111827] max-w-5xl">
             Multi-Persona AI

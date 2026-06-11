@@ -7,15 +7,11 @@ import { CircularLoader } from "@/components/ui/loader";
 import PersonaPanel from "./PersonaPanel";
 
 import { usePersonaList } from "@/api/Persona/query";
+import type { BuilderChatTurnResponse } from "@/api/Chat/mutation";
 import { getAuthToken, postApi } from "@/lib/api";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { findActiveBuilderSession, upsertSession } from "@/lib/chatStore";
 import { queryClient } from "@/provider";
-
-type BuilderStartResponse = {
-  conversation_id: string;
-  first_message: string;
-};
 
 function CenteredLoader({ text }: { text: string }) {
   return (
@@ -65,21 +61,21 @@ function BuilderEntry({
 
       try {
         // /chat/start was merged into /chat/message, selected by flow="start".
-        const data = await postApi<BuilderStartResponse>("persona/chat/message", {
+        const data = await postApi<BuilderChatTurnResponse>("persona/chat/message", {
           token: getAuthToken(),
           flow: "start",
           project_id: projectId,
         });
-        if (data?.conversation_id) {
+        if (data?.id) {
           upsertSession({
-            id: data.conversation_id,
+            id: data.id,
             kind: "builder",
             projectId,
             title: "New persona chat",
           });
           // Surface the new conversation in the sidebar Recents (chat-list).
           queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
-          navigate(`/chat/${data.conversation_id}`, {
+          navigate(`/chat/${data.id}`, {
             state: { projectId },
             replace: true,
           });
