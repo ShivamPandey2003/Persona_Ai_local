@@ -113,7 +113,12 @@ function isBuilderPersona(p: PersonaListItem): boolean {
  * mapped construct/theme/role/timeframe/scope/profile ids. Renders nothing for
  * personas without builder output (e.g. data-file generated personas).
  */
+/** Collapsed height (px) for a persona's detail block before "Show more". */
+const DETAILS_COLLAPSED_MAX = 132;
+
 function PersonaDetails({ persona }: { persona: PersonaListItem }) {
+  const [expanded, setExpanded] = useState(false);
+
   const taxonomy = [
     persona.industry ? (["Industry", humanizeToken(persona.industry)] as const) : null,
     persona.category ? (["Category", humanizeToken(persona.category)] as const) : null,
@@ -134,11 +139,34 @@ function PersonaDetails({ persona }: { persona: PersonaListItem }) {
     ["Profile fields", persona.profile_ids],
   ];
 
-  const hasChips = chipGroups.some(([, items]) => items && items.length > 0);
-  if (taxonomy.length === 0 && demographics.length === 0 && !hasChips) return null;
+  const populatedChipGroups = chipGroups.filter(
+    ([, items]) => items && items.length > 0,
+  );
+  const isEmpty =
+    taxonomy.length === 0 &&
+    demographics.length === 0 &&
+    populatedChipGroups.length === 0;
+  if (isEmpty) return null;
+
+  // "Show more" appears only for detail-heavy personas; deterministic (no DOM
+  // measurement) so it stays stable across renders. Collapsed view is clamped
+  // to a fixed height via CSS.
+  const sectionCount =
+    (taxonomy.length > 0 ? 1 : 0) +
+    (demographics.length > 0 ? 1 : 0) +
+    populatedChipGroups.length;
+  const isLong = sectionCount > 3;
+  const collapsed = isLong && !expanded;
 
   return (
-    <div className="flex flex-col gap-3 border-t pt-3">
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <div
+        style={{ maxHeight: collapsed ? DETAILS_COLLAPSED_MAX : undefined }}
+        className={cn(
+          "flex flex-col gap-3 transition-[max-height] duration-200",
+          collapsed && "overflow-hidden",
+        )}
+      >
       {taxonomy.length > 0 && (
         <div className="flex flex-col gap-1">
           {taxonomy.map(([label, value]) => (
@@ -173,6 +201,18 @@ function PersonaDetails({ persona }: { persona: PersonaListItem }) {
       {chipGroups.map(([label, items]) => (
         <DetailChips key={label} label={label} items={items} />
       ))}
+      </div>
+
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="self-start text-xs font-semibold text-primary hover:underline"
+          aria-expanded={expanded}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
     </div>
   );
 }
@@ -241,6 +281,17 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
     [personas, selected],
   );
 
+  const allSelected =
+    personas.length > 0 && selectedPersonas.length === personas.length;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelected({});
+    } else {
+      setSelected(Object.fromEntries(personas.map((p) => [p.persona_id, true])));
+    }
+  };
+
   const startChat = (personaIds: string[], title: string, marker: string) => {
     if (!projectId || personaIds.length === 0 || startGroup.isPending) return;
     setPendingId(marker);
@@ -305,7 +356,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                     isSelected && "ring-2 ring-primary",
                   )}
                 >
-                  <CardContent className="flex flex-1 flex-col gap-4 pt-5">
+                  <CardContent className="flex flex-1 flex-col gap-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
@@ -391,11 +442,23 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
       </ScrollArea>
 
       <div className="flex items-center justify-between gap-2 pt-1">
-        <span className="text-xs text-muted-foreground">
-          {selectedPersonas.length > 0
-            ? `${selectedPersonas.length} selected`
-            : "Select personas to start a group chat"}
-        </span>
+        <div className="flex items-center gap-3">
+          {personas.length > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={toggleSelectAll}
+                aria-label="Select all personas"
+              />
+              Select all
+            </label>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {selectedPersonas.length > 0
+              ? `${selectedPersonas.length} selected`
+              : "Select personas to start a group chat"}
+          </span>
+        </div>
         <Button
           disabled={selectedPersonas.length === 0 || startGroup.isPending}
           onClick={() =>

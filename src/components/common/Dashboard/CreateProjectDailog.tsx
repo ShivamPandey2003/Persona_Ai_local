@@ -68,7 +68,7 @@ const CreateProjectDailog = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="py-2 md:my-4 space-y-2">
-            <Label>Select your role</Label>
+            <Label required>Project Type</Label>
             <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-4">
               {Roles.map((item) => {
                 return (
@@ -90,7 +90,7 @@ const CreateProjectDailog = () => {
 
           <div className="grid gap-4 py-2 md:py-4">
             <div className="grid gap-2">
-              <Label htmlFor="title">Project Title</Label>
+              <Label htmlFor="title" required>Project Title</Label>
               <Input
                 id="title"
                 placeholder="e.g. EverSip Persona Study"
@@ -105,9 +105,9 @@ const CreateProjectDailog = () => {
           </div>
           <div className="grid gap-4 py-2 md:py-4">
             <div className="grid gap-2">
-              <Label htmlFor="title">Project Description</Label>
+              <Label htmlFor="description" required>Project Description</Label>
               <Input
-                id="title"
+                id="description"
                 placeholder="e.g. EverSip Persona Study is about..."
                 {...register("description")}
               />

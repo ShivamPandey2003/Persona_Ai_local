@@ -469,4 +469,26 @@
   html {
     @apply font-sans;
   }
+
+  /* Interactive/clickable elements get a pointer cursor by default
+     (buttons, links, menu items, tabs, checkboxes, switches, etc.). */
+  button:not(:disabled),
+  a[href],
+  label[for],
+  summary,
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="option"],
+  [role="checkbox"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }

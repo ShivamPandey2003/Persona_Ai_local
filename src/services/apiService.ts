@@ -1,5 +1,6 @@
 import axios from "axios";
 import { toast } from "sonner";
+import { getApiErrorMessage, getNetworkErrorMessage } from "@/lib/apiError";
 
 const platform_url = import.meta.env.VITE_REACT_APP_API_URL;
 
@@ -58,30 +59,58 @@ export const apiRequest = async (
       responseType,
     });
     if (responseType === "json") {
-      if (response?.data?.code === 200) {
-        return response.data;
-      } else if (response?.data?.code === 401) {
-        toast.error("Session expired, logging out.");
+      const body = response?.data;
+      // The backend always answers HTTP 200; the real status lives in the
+      // envelope (`header.code`, or a legacy top-level `code`).
+      const code: number | undefined = body?.header?.code ?? body?.code;
+      const message: string | undefined = body?.header?.message ?? body?.message;
+
+      if (code === 401) {
+        toast.error(getApiErrorMessage(401, message));
         handleSessionExpiration();
-        return response.data;
-      } else {
-        return {
-          response: response.data,
-        };
+        return body;
       }
+
+      // Any other non-success envelope is surfaced as a thrown error so
+      // react-query (and mutations) move into an error state, with a toast.
+      if (typeof code === "number" && code >= 400) {
+        const friendly = getApiErrorMessage(code, message);
+        toast.error(friendly);
+        throw new Error(friendly);
+      }
+
+      // Success — preserve the historical return shapes used by callers.
+      if (body?.code === 200) {
+        return body;
+      }
+      return { response: body };
     } else {
-      return { response: response.data, headers:response.headers };
+      return { response: response.data, headers: response.headers };
     }
   } catch (error: any) {
-    if (error?.status === 401) {
-      toast.error("Session expired, logging out.");
-      handleSessionExpiration();
-    } else if (
-      error.response?.status === 400 ||
-      error?.status === 400 ||
-      error?.data?.code === 400
-    ) {
-      toast.error(error.data.header.message);
+    // Errors we raised above are already toasted; the axios interceptor rejects
+    // with a response object or a string (never an Error), so any Error here is
+    // one of ours — just propagate it without a second toast.
+    if (error instanceof Error) {
+      throw error;
     }
+
+    const status: number | undefined =
+      error?.status ?? error?.response?.status ?? error?.data?.code;
+    const backendMessage: string | undefined =
+      error?.data?.header?.message ?? error?.response?.data?.header?.message;
+
+    if (status === 401) {
+      const message401 = getApiErrorMessage(401, backendMessage);
+      toast.error(message401);
+      handleSessionExpiration();
+      throw new Error(message401, { cause: error });
+    }
+
+    const friendly = status
+      ? getApiErrorMessage(status, backendMessage)
+      : getNetworkErrorMessage();
+    toast.error(friendly);
+    throw new Error(friendly, { cause: error });
   }
 };

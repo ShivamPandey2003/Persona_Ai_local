@@ -83,7 +83,9 @@ const EditProjectDialog = () => {
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-project-title">Project Title</Label>
+              <Label htmlFor="edit-project-title" required>
+                Project Title
+              </Label>
               <Input
                 id="edit-project-title"
                 placeholder="e.g. EverSip Persona Study"

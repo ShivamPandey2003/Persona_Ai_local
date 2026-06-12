@@ -1,19 +1,51 @@
 import type { Project } from "@/api/Projects/query";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowRight, FileText, Users } from "lucide-react";
+import { setProjectDelete } from "@/redux/GlobalModalSlice";
+import type { AppDispatch } from "@/redux/store";
+import { FileText, Trash2, Users } from "lucide-react";
 import { memo } from "react";
-import { Link } from "react-router";
+import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router";
 
 const ProjectCard = ({ project }: { project: Project }) => {
+  const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
   const fileCount = project.total_files_count;
   const personaCount = project.total_personas_count;
+
+  // The whole card is the click target: open the project details (chat) view.
+  const openProject = () =>
+    navigate("/chat", { state: { projectId: project.project_id } });
+
+  // Stop the card's open handler so the delete icon only deletes.
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    dispatch(setProjectDelete(project.project_id));
+  };
+
   return (
-    <article className="group relative flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {/* <Calendar className="h-3.5 w-3.5" /> */}
-          <span>{project.status}</span>
-        </div>
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={openProject}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openProject();
+        }
+      }}
+      className="group relative flex cursor-pointer flex-col gap-2 rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {/* Delete icon (top-right) */}
+      <button
+        type="button"
+        onClick={handleDelete}
+        aria-label="Delete project"
+        className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+
+      <header className="pr-10">
         <h3 className="text-lg font-semibold tracking-tight text-foreground">
           {project.project_name}
         </h3>
@@ -30,16 +62,6 @@ const ProjectCard = ({ project }: { project: Project }) => {
           <Users className="h-3.5 w-3.5" />
           {personaCount} {personaCount === 1 ? "persona" : "personas"}
         </span>
-      </div>
-      <div className="mt-auto pt-2 flex items-center justify-between">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground transition-colors hover:text-primary"
-        >
-          Open project
-          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-        </Link>
-        <Checkbox className="border-gray-400"/>
       </div>
     </article>
   );

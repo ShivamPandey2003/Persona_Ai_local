@@ -1,6 +1,7 @@
 import { apiRequest } from "@/services/apiService";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 
 type LoginRes = {
     header: ResponseHeader;
@@ -27,8 +28,12 @@ export const Login = () => {
     },
     onSuccess:(data)=>{
         localStorage.setItem("user", btoa(JSON.stringify(data.response)))
+        toast.success("Logged in successfully")
         navigate('/dashboard')
-    }
+    },
+    // Login failures are surfaced with a backend-driven error toast by the
+    // shared `apiRequest` layer, so no extra error toast is needed here (it
+    // would otherwise show the same message twice).
   });
 
   return login

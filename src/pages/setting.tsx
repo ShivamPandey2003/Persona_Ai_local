@@ -205,8 +205,8 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Industry</label>
+                <div className="space-y-2.5">
+                  <label className="block text-sm font-medium">Industry</label>
                   <Input
                     value={form.industry}
                     onChange={(e) => update("industry", e.target.value)}
@@ -214,8 +214,8 @@ export default function SettingsPage() {
                     maxLength={100}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Domain</label>
+                <div className="space-y-2.5">
+                  <label className="block text-sm font-medium">Domain</label>
                   <Input
                     value={form.domain}
                     onChange={(e) => update("domain", e.target.value)}
@@ -244,12 +244,15 @@ export default function SettingsPage() {
               {form.assumptions.map((assumption, index) => (
                 <div
                   key={index}
-                  className="flex items-center justify-between rounded-md border px-3 py-2"
+                  className="flex items-start justify-between gap-2 rounded-md border px-3 py-2"
                 >
-                  <span className="text-sm">{assumption}</span>
+                  <span className="flex-1 text-sm leading-relaxed break-words">
+                    {assumption}
+                  </span>
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="h-7 w-7 shrink-0"
                     onClick={() => removeAssumption(index)}
                     aria-label="Remove assumption"
                   >
@@ -257,7 +260,7 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               ))}
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   value={newAssumption}
                   onChange={(e) => setNewAssumption(e.target.value)}
@@ -268,8 +271,13 @@ export default function SettingsPage() {
                     }
                   }}
                   placeholder="Add a new assumption..."
+                  className="flex-1"
                 />
-                <Button onClick={addAssumption} disabled={!newAssumption.trim()}>
+                <Button
+                  onClick={addAssumption}
+                  disabled={!newAssumption.trim()}
+                  className="shrink-0"
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Add
                 </Button>
