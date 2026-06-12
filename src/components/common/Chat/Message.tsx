@@ -6,17 +6,22 @@ import {
   MessageContent,
 } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Pencil } from "lucide-react";
 import { memo, useState } from "react";
 import { toast } from "sonner";
 
 type MessageComponentProps = {
   message: MessageT;
   isLastMessage: boolean;
+  /**
+   * When provided (user messages only), shows an Edit action that loads the
+   * message text back into the composer so it can be edited and re-sent.
+   */
+  onEdit?: (text: string) => void;
 };
 
 export const MessageComponent = memo(
-  ({ message, isLastMessage }: MessageComponentProps) => {
+  ({ message, isLastMessage, onEdit }: MessageComponentProps) => {
     const [copied, setCopied] = useState(false);
     const isAssistant = message.userType === "Assistant";
 
@@ -69,6 +74,18 @@ export const MessageComponent = memo(
               {message.message}
             </MessageContent>
             <MessageActions className="flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              {onEdit && (
+                <MessageAction tooltip="Edit" delayDuration={100}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full"
+                    onClick={() => onEdit(message.message)}
+                  >
+                    <Pencil />
+                  </Button>
+                </MessageAction>
+              )}
               <MessageAction tooltip={copied ? "Copied" : "Copy"} delayDuration={100}>
                 <Button
                   variant="ghost"

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Settings, LayoutDashboard, Plus, Users, MessageSquare } from "lucide-react";
+import { Home, Settings, LayoutDashboard, Plus, Users, MessageSquare } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +24,7 @@ import { useChatList } from "@/api/Chat/query";
 import { useActiveProjectId, chatIdFromPath } from "@/hooks/useActiveProjectId";
 
 const items = [
+  { title: "Home", url: "/", icon: Home },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Settings", url: "/settings", icon: Settings },
 ];

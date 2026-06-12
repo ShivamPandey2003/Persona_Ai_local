@@ -56,3 +56,35 @@ export const getProjectList = (
     enabled: !!token && (search.length === 0 || search.length >= 3),
   });
 };
+
+type GetProjectRes = {
+  header: ResponseHeader;
+  response: Project;
+};
+
+/**
+ * POST /v1/projects/get — full details for a single project.
+ *
+ * Used by the chat/persona views to show the active project's real name (instead
+ * of a placeholder). Disabled until both the auth token and a `projectId` are
+ * available, so it only fires once we know which project to load.
+ */
+export const useProjectDetail = (projectId: string | undefined) => {
+  const userStr = localStorage.getItem("user");
+  const userData = userStr ? JSON.parse(atob(userStr)) : null;
+  const token = userData?.token || "";
+
+  return useQuery<Project>({
+    queryKey: ["ProjectDetail", projectId],
+    queryFn: async () => {
+      const payload = { token, project_id: projectId };
+      const res = await apiRequest("post", "projects/get", payload);
+      const data = await res;
+      const envelope = data.response as GetProjectRes;
+      return envelope.response;
+    },
+    enabled: !!token && !!projectId,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+};

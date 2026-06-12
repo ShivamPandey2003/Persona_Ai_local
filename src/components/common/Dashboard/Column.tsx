@@ -34,7 +34,7 @@ const Column: ColumnDef<Project, any>[] = [
     header:  () => {
       return (
         <div className="w-full max-w-[20rem]">
-          Type
+          Project Type
         </div>
       );
     },
@@ -80,28 +80,31 @@ const Column: ColumnDef<Project, any>[] = [
       );
     },
   }),
-  columnHelper.accessor("status", {
-    header:  () => {
-      return (
-        <div className="text-center">
-          Status
-        </div>
-      );
-    },
-    cell: ({ getValue }) => {
-      return (
-        <div onClick={() => {}} className="w-full cursor-pointer text-center py-1">
-          {getValue()}
-        </div>
-      );
-    },
-  }),
+  // Status column temporarily hidden.
+  // columnHelper.accessor("status", {
+  //   header:  () => {
+  //     return (
+  //       <div className="text-center">
+  //         Status
+  //       </div>
+  //     );
+  //   },
+  //   cell: ({ getValue }) => {
+  //     return (
+  //       <div onClick={() => {}} className="w-full cursor-pointer text-center py-1">
+  //         {getValue()}
+  //       </div>
+  //     );
+  //   },
+  // }),
   {
      id: "Actions",
-     header:"Actions",
+     header: () => <div className="text-center">Actions</div>,
      cell:({row})=>{
         return (
-            <Dropdown project={row.original}/>
+            <div className="flex justify-center">
+              <Dropdown project={row.original}/>
+            </div>
         )
      }
   }

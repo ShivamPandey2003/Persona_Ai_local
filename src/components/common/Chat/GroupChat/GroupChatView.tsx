@@ -23,6 +23,7 @@ import { personaColorStyle } from "@/lib/personaColors";
 import LoadingMessage from "../LoadingMessage";
 import ErrorMessage from "../ErrorMessage";
 import ChatComposer from "../ChatComposer";
+import ChatEnded from "../ChatEnded";
 import GroupMessage from "./GroupMessage";
 import AssumptionsDialog from "./AssumptionsDialog";
 
@@ -94,6 +95,21 @@ function GroupChatView() {
     loadOlder: history.loadOlder,
     signal: history.messages.length,
   });
+
+  // Edit: load a previous message's text back into the composer, then focus the
+  // textarea (caret at the end) so it can be tweaked and re-sent.
+  const composerRef = useRef<HTMLDivElement>(null);
+  const handleEditMessage = useCallback((text: string) => {
+    setInput(text);
+    requestAnimationFrame(() => {
+      const textarea = composerRef.current?.querySelector("textarea");
+      if (textarea) {
+        textarea.focus();
+        const end = textarea.value.length;
+        textarea.setSelectionRange(end, end);
+      }
+    });
+  }, []);
 
   const appendLive = (next: GroupMessageT[]) =>
     setLiveMessages((prev) => [...prev, ...next]);
@@ -244,6 +260,7 @@ function GroupChatView() {
                     ? colorByName[message.persona_name]
                     : undefined
                 }
+                onEdit={ended ? undefined : handleEditMessage}
               />
             ))
           )}
@@ -252,13 +269,10 @@ function GroupChatView() {
         </ChatContainerContent>
       </ChatContainerRoot>
 
-      {ended && (
-        <p className="mx-auto w-full max-w-3xl px-5 pb-1 text-center text-xs text-muted-foreground">
-          This discussion has ended.
-        </p>
-      )}
+      {ended && <ChatEnded message="This discussion has ended." />}
 
       <ChatComposer
+        rootRef={composerRef}
         value={input}
         onChange={setInput}
         onSubmit={handleSend}

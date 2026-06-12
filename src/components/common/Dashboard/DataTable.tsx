@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import ColumnDropdown from "./ColumnDropdown";
+// import ColumnDropdown from "./ColumnDropdown";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
@@ -116,7 +116,8 @@ export function DataTable<TData, TValue>({
         {/* Action Buttons Cluster */}
         <div className="flex items-center justify-end gap-3">
           <CreateProjectDailog />
-          {content === "Table" && <ColumnDropdown table={table} />}
+          {/* Column selector temporarily hidden. */}
+          {/* {content === "Table" && <ColumnDropdown table={table} />} */}
 
           <TabsList className="bg-[#F5F6FF] border border-[#E8ECFF] p-1 h-12 rounded-xl">
             <TabsTrigger
@@ -140,8 +141,8 @@ export function DataTable<TData, TValue>({
       {/* VIEWPORT AREA */}
       <TabsContent value="Table" className="mt-0 outline-none">
         <div className="bg-white rounded-lg border border-white/60 shadow-[0_15px_50px_rgba(99,56,246,0.04)] overflow-hidden">
-          <Table>
-            <TableHeader className="bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] border-b border-[#F1F1F1]">
+          <Table containerClassName="max-h-[60vh] overflow-y-auto">
+            <TableHeader className="sticky top-0 z-20 bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] border-b border-[#F1F1F1] [&_tr]:bg-transparent">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
                   key={headerGroup.id}

@@ -10,6 +10,7 @@ import type { AppDispatch } from "@/redux/store";
 import type { Project } from "@/api/Projects/query";
 import { EllipsisVertical } from "lucide-react";
 import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router";
 
 type Props = {
   project: Project;
@@ -17,6 +18,10 @@ type Props = {
 
 export function Dropdown({ project }: Props) {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
+
+  const openProject = () =>
+    navigate("/chat", { state: { projectId: project.project_id } });
 
   return (
     <DropdownMenu>
@@ -26,7 +31,9 @@ export function Dropdown({ project }: Props) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem className="cursor-pointer">Open project</DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer" onClick={openProject}>
+          Open project
+        </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer" onClick={() => dispatch(setProjectEdit(project))}>
           Edit
         </DropdownMenuItem>

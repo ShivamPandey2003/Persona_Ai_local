@@ -162,7 +162,7 @@ export default function PersonaAILoginPage() {
                 {/* EMAIL */}
                 <div>
                   <label className="text-sm font-medium text-[#374151] block mb-3">
-                    Email Address
+                    Email Address <span className="text-red-500">*</span>
                   </label>
 
                   <div className="relative">
@@ -190,7 +190,7 @@ export default function PersonaAILoginPage() {
                 {/* PASSWORD */}
                 <div>
                   <label className="text-sm font-medium text-[#374151] block mb-3">
-                    Password
+                    Password <span className="text-red-500">*</span>
                   </label>
 
                   <div className="relative">

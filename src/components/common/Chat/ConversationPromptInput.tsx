@@ -15,11 +15,12 @@ import ChatComposer from "./ChatComposer";
 import { Button } from "@/components/ui/button";
 import { CircularLoader } from "@/components/ui/loader";
 
-import { useBuilderHistory } from "@/api/Chat/query";
+import { useBuilderHistory, useChatList } from "@/api/Chat/query";
 import { useBuilderChatMessage } from "@/api/Chat/mutation";
+import ChatEnded from "@/components/common/Chat/ChatEnded";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
-import { touchSession } from "@/lib/chatStore";
+import { getSession, touchSession } from "@/lib/chatStore";
 import { setPersonaDialog } from "@/redux/ProjectSlice";
 import type { AppDispatch } from "@/redux/store";
 import { queryClient } from "@/provider";
@@ -47,21 +48,43 @@ function ConversationPromptInput() {
   const history = useBuilderHistory(conversationId);
   const [liveMessages, setLiveMessages] = useState<MessageT[]>([]);
   const [input, setInput] = useState("");
-  // Set once the agent returns final_result: personas are built and the backend
-  // has closed the conversation, so no further messages are accepted.
-  const [ended, setEnded] = useState(false);
+  // Local "ended" transitions during this session: the agent returns
+  // final_result (personas built) or the backend rejects a message because the
+  // conversation is already closed.
+  const [endedLocal, setEndedLocal] = useState(false);
 
   const messageMut = useBuilderChatMessage(conversationId ?? "");
+
+  // The backend chat-list is the durable source of truth for an ended
+  // conversation (builder chat status is "active" | "ended"). It survives logout
+  // — which clears localStorage — and hard refreshes, unlike the local session
+  // flag. OR-ing all three keeps the ended state correct both immediately on
+  // completion and after logging back in.
+  const { data: chatList } = useChatList(projectId);
+  const serverEnded = useMemo(
+    () =>
+      chatList?.some(
+        (c) =>
+          c.kind === "builder" &&
+          c.id === conversationId &&
+          c.status?.toLowerCase() === "ended",
+      ) ?? false,
+    [chatList, conversationId],
+  );
+  const ended =
+    endedLocal || serverEnded || (getSession(conversationId)?.ended ?? false);
 
   const messages = useMemo(
     () => [...history.messages, ...liveMessages],
     [history.messages, liveMessages],
   );
 
-  // Reset local state when switching between conversations.
+  // Reset live state when switching conversations. The derived `ended` value
+  // (server status / session flag) recomputes on its own, so only the local
+  // session-scoped flag needs clearing here.
   useEffect(() => {
     setLiveMessages([]);
-    setEnded(false);
+    setEndedLocal(false);
   }, [conversationId]);
 
   // Scroll-up loads older history while keeping the viewport anchored.
@@ -70,6 +93,21 @@ function ConversationPromptInput() {
     () => stbRef.current?.scrollRef.current ?? null,
     [],
   );
+
+  // Edit: load a previous message's text back into the composer, then focus the
+  // textarea (caret at the end) so it can be tweaked and re-sent.
+  const composerRef = useRef<HTMLDivElement>(null);
+  const handleEditMessage = useCallback((text: string) => {
+    setInput(text);
+    requestAnimationFrame(() => {
+      const textarea = composerRef.current?.querySelector("textarea");
+      if (textarea) {
+        textarea.focus();
+        const end = textarea.value.length;
+        textarea.setSelectionRange(end, end);
+      }
+    });
+  }, []);
   useLoadOlderOnScroll({
     getScrollEl,
     ready: history.ready,
@@ -86,11 +124,13 @@ function ConversationPromptInput() {
   // persona panel queries, and open the panel automatically — there is no
   // manual "end" step.
   const finishConversation = () => {
-    setEnded(true);
+    setEndedLocal(true);
     if (conversationId) touchSession(conversationId, { ended: true });
     if (projectId) {
       queryClient.invalidateQueries({ queryKey: ["PersonaList", projectId] });
       queryClient.invalidateQueries({ queryKey: ["PersonaDashboard", projectId] });
+      // Refresh chat-list so the durable ended status is reflected everywhere.
+      queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
     }
     openPersonaPanel();
   };
@@ -125,7 +165,12 @@ function ConversationPromptInput() {
           if (data.final_result) finishConversation();
         },
         onError: (err) => {
-          if (/ended/i.test(err.message)) setEnded(true);
+          if (/ended/i.test(err.message)) {
+            setEndedLocal(true);
+            // Cache locally too; the backend chat-list status remains the
+            // durable source after logout.
+            if (conversationId) touchSession(conversationId, { ended: true });
+          }
         },
       },
     );
@@ -167,6 +212,7 @@ function ConversationPromptInput() {
               key={message.id}
               message={message}
               isLastMessage={index === messages.length - 1}
+              onEdit={ended ? undefined : handleEditMessage}
             />
           ))}
 
@@ -182,13 +228,10 @@ function ConversationPromptInput() {
         </ChatContainerContent>
       </ChatContainerRoot>
 
-      {ended && (
-        <p className="mx-auto w-full max-w-3xl px-5 pb-1 text-center text-xs text-muted-foreground">
-          This conversation has ended.
-        </p>
-      )}
+      {ended && <ChatEnded message="This conversation has ended." />}
 
       <ChatComposer
+        rootRef={composerRef}
         value={input}
         onChange={setInput}
         onSubmit={handleSend}

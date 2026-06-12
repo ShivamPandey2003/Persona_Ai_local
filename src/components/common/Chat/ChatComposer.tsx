@@ -18,6 +18,8 @@ type ChatComposerProps = {
   placeholder?: string;
   /** Optional control rendered on the left of the action row (e.g. a target selector). */
   leftSlot?: React.ReactNode;
+  /** Ref to the composer's root element (used to focus the textarea, e.g. when editing a message). */
+  rootRef?: React.Ref<HTMLDivElement>;
 };
 
 /**
@@ -32,6 +34,7 @@ function ChatComposer({
   isSending = false,
   placeholder = "Ask anything",
   leftSlot,
+  rootRef,
 }: ChatComposerProps) {
   const canSend = Boolean(value.trim()) && !disabled && !isSending;
 
@@ -41,7 +44,10 @@ function ChatComposer({
   };
 
   return (
-    <div className="inset-x-0 bottom-0 mx-auto w-full max-w-3xl shrink-0 px-3 pb-3 md:px-5">
+    <div
+      ref={rootRef}
+      className="inset-x-0 bottom-0 mx-auto w-full max-w-3xl shrink-0 px-3 pb-3 md:px-5"
+    >
       <PromptInput
         isLoading={isSending}
         value={value}

@@ -1,5 +1,6 @@
 import { apiRequest } from "@/services/apiService";
 import { toast } from "sonner";
+import { getApiErrorMessage, getNetworkErrorMessage } from "@/lib/apiError";
 
 /**
  * Reads the auth token that the backend expects inside request payloads.
@@ -41,10 +42,13 @@ export async function postApi<T>(
   url: string,
   body: Record<string, unknown>,
 ): Promise<T> {
+  // `apiRequest` already surfaces a toast and throws for non-success envelopes
+  // and transport errors; the checks below are a defensive fallback in case a
+  // caller reaches here with an unexpected shape.
   const res = await apiRequest("post", url, body);
 
   if (!res || !res.response) {
-    throw new Error("Network error. Please check your connection and try again.");
+    throw new Error(getNetworkErrorMessage());
   }
 
   const envelope = res.response as ApiEnvelope<T>;
@@ -53,14 +57,14 @@ export async function postApi<T>(
 
   if (code && code !== 200) {
     if (code === 401) {
-      toast.error("Session expired. Please log in again.");
+      toast.error(getApiErrorMessage(401, message));
       localStorage.clear();
       sessionStorage.clear();
       window.location.href = "/";
     } else {
-      toast.error(message || "Something went wrong. Please try again.");
+      toast.error(getApiErrorMessage(code, message));
     }
-    throw new Error(message || `Request failed with code ${code}`);
+    throw new Error(getApiErrorMessage(code, message));
   }
 
   return envelope.response;

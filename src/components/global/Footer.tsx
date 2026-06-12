@@ -1,8 +1,10 @@
 import { Logo } from "@/assets";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 const Footer = () => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const onPrivacyPolicy = pathname === "/privacy-policy";
   return (
     <footer className="border-t border-[#F1F1F1] px-8 md:px-14 py-8 bg-white">
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -23,12 +25,14 @@ const Footer = () => {
 
         {/* CENTER */}
         <div className="flex items-center gap-8 text-sm text-[#6B7280]">
-          <button
-            className="hover:text-[#6338F6] transition-all"
-            onClick={() => navigate("/privacy-policy")}
-          >
-            Privacy Policy
-          </button>
+          {!onPrivacyPolicy && (
+            <button
+              className="hover:text-[#6338F6] transition-all"
+              onClick={() => navigate("/privacy-policy")}
+            >
+              Privacy Policy
+            </button>
+          )}
 
           {/* <button className="hover:text-[#6338F6] transition-all">
                 Contact Us
@@ -37,7 +41,7 @@ const Footer = () => {
 
         {/* RIGHT */}
         <div className="text-sm text-[#9CA3AF] text-center md:text-right max-w-md leading-6">
-          AI predictions are for informational purposes only.
+          *AI predictions are for informational purposes only.
         </div>
       </div>
     </footer>
