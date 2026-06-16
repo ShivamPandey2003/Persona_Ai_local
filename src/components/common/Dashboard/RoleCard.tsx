@@ -18,6 +18,7 @@ const RoleCard = ({ role, isSelected, setSelected }: Props) => {
   const { icon: Icon, ...rest } = role;
   return (
     <Card
+      data-test-id={`project_type_${rest.id}`}
       key={rest.id}
       className={cn(
         "relative cursor-pointer transition-all duration-200 hover:border-foreground/20 w-full",

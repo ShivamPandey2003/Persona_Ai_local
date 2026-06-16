@@ -38,7 +38,7 @@ const Rootlayout = () => {
           <header className="h-14 border-b border-[#F1F1F1] px-6 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
-              <span className="text-sm font-medium text-[#111827] ml-2">
+              <span data-test-id={getPageTitle()} className="text-sm font-medium text-[#111827] ml-2">
                 {getPageTitle()}
               </span>
             </div>

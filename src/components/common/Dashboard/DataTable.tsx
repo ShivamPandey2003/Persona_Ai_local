@@ -141,7 +141,7 @@ export function DataTable<TData, TValue>({
       {/* VIEWPORT AREA */}
       <TabsContent value="Table" className="mt-0 outline-none">
         <div className="bg-white rounded-lg border border-white/60 shadow-[0_15px_50px_rgba(99,56,246,0.04)] overflow-hidden">
-          <Table containerClassName="max-h-[60vh] overflow-y-auto">
+          <Table data-test-id="DASHBOARD" containerClassName="max-h-[60vh] overflow-y-auto">
             <TableHeader className="sticky top-0 z-20 bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] border-b border-[#F1F1F1] [&_tr]:bg-transparent">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow

@@ -179,6 +179,7 @@ export default function PersonaAILoginPage() {
                           email: e.target.value,
                         }))
                       }
+                      data-test-id="EMAIL"
                       disabled={isPending}
                       type="email"
                       placeholder="Enter your email"
@@ -207,6 +208,7 @@ export default function PersonaAILoginPage() {
                           password: e.target.value,
                         }))
                       }
+                      data-test-id="PASSWORD"
                       disabled={isPending}
                       type="password"
                       placeholder="Enter your password"
@@ -235,6 +237,7 @@ export default function PersonaAILoginPage() {
                   onClick={OnSubmit}
                   className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white font-medium shadow-[0_15px_35px_rgba(99,56,246,0.35)] hover:scale-[1.01] transition-all duration-300"
                   disabled={isPending}
+                  data-test-id="SUBMIT"
                 >
                   {isPending ? (
                     <span className="flex items-center justify-center gap-2">

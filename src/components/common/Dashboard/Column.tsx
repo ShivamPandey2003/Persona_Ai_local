@@ -22,25 +22,22 @@ const Column: ColumnDef<Project, any>[] = [
     cell: ({ row, getValue }) => {
       const ProjectId = row.original.project_id;
       return (
-        <Link to={'/chat'} state={{projectId:ProjectId}}>
-        <div className="w-full cursor-pointer py-1">
-          {getValue()}
-        </div>
+        <Link data-test-id={`PROJECT_TITLE_${getValue()}`} to={"/chat"} state={{ projectId: ProjectId }}>
+          <div className="w-full cursor-pointer py-1">{getValue()}</div>
         </Link>
       );
     },
   }),
   columnHelper.accessor("project_type", {
-    header:  () => {
-      return (
-        <div className="w-full max-w-[20rem]">
-          Project Type
-        </div>
-      );
+    header: () => {
+      return <div className="w-full max-w-[20rem]">Project Type</div>;
     },
     cell: ({ getValue }) => {
       return (
-        <div onClick={() => {}} className="w-full max-w-[20rem] overflow-hidden text-ellipsis cursor-pointer py-1">
+        <div
+          onClick={() => {}}
+          className="w-full max-w-[20rem] overflow-hidden text-ellipsis cursor-pointer py-1"
+        >
           {getValue()}
         </div>
       );
@@ -50,14 +47,17 @@ const Column: ColumnDef<Project, any>[] = [
     header: () => {
       return (
         <div className="flex items-center justify-center gap-1">
-          <File className="size-4"/>
+          <File className="size-4" />
           <span>Files</span>
         </div>
       );
     },
     cell: ({ getValue }) => {
       return (
-        <div onClick={() => {}} className="w-full cursor-pointer py-1 text-center">
+        <div
+          onClick={() => {}}
+          className="w-full cursor-pointer py-1 text-center"
+        >
           {getValue()}
         </div>
       );
@@ -74,7 +74,10 @@ const Column: ColumnDef<Project, any>[] = [
     },
     cell: ({ getValue }) => {
       return (
-        <div onClick={() => {}} className="w-full cursor-pointer py-1 text-center">
+        <div
+          onClick={() => {}}
+          className="w-full cursor-pointer py-1 text-center"
+        >
           {getValue()}
         </div>
       );
@@ -98,16 +101,16 @@ const Column: ColumnDef<Project, any>[] = [
   //   },
   // }),
   {
-     id: "Actions",
-     header: () => <div className="text-center">Actions</div>,
-     cell:({row})=>{
-        return (
-            <div className="flex justify-center">
-              <Dropdown project={row.original}/>
-            </div>
-        )
-     }
-  }
+    id: "Actions",
+    header: () => <div className="text-center">Actions</div>,
+    cell: ({ row }) => {
+      return (
+        <div className="flex justify-center">
+          <Dropdown project={row.original} />
+        </div>
+      );
+    },
+  },
 ];
 
 export default Column;

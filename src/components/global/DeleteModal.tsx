@@ -43,6 +43,7 @@ export default function DeleteDialog({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button
+            data-test-id="DELETE_CONFIRM"
             variant="destructive"
             onClick={() => {
               onClick();
