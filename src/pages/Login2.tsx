@@ -13,6 +13,7 @@ import { useState, type MouseEvent } from "react";
 // import { toast } from "sonner";
 import { Login } from "@/api/Auth/mutation";
 import { aesEncrypt } from "@/lib/encryption&decryption";
+import AuroraBackground from "@/components/global/AuroraBackground";
 
 export default function PersonaAILoginPage() {
   const [userCred, setUserCred] = useState<{ email: string; password: string }>(
@@ -35,8 +36,9 @@ export default function PersonaAILoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6 flex items-center justify-center">
-      <div className="w-full max-w-7xl bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl grid grid-cols-1 lg:grid-cols-2">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] font-sans p-4 md:p-6 flex items-center justify-center">
+      <AuroraBackground />
+      <div className="relative w-full max-w-7xl bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl grid grid-cols-1 lg:grid-cols-2">
         {/* LEFT SECTION */}
         <div className="relative overflow-hidden bg-gradient-to-br from-[#5f6fff] to-[#7b89ff] p-10 md:p-8 flex flex-col justify-between">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.35),transparent_40%)]" />
@@ -134,7 +136,7 @@ export default function PersonaAILoginPage() {
         <div className="flex justify-center p-8 md:p-8 bg-[#FCFCFF]">
           <div className="w-full max-w-md">
             {/* LOGIN CARD */}
-            <div className="rounded-[32px] bg-white border border-[#F1F1F1] shadow-[0_20px_60px_rgba(99,56,246,0.08)] p-8 md:p-10">
+            <div className="rounded-[32px] bg-white border border-[#F1F1F1] shadow-[0_20px_60px_rgba(99,56,246,0.08)] p-8 md:p-10 duration-500 animate-in fade-in zoom-in-95">
               {/* TITLE */}
               <div className="mb-10">
                 {/* <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#6338F6] to-[#8B5CF6] flex items-center justify-center text-white shadow-lg shadow-[#6338F6]/20 mb-6">
@@ -172,6 +174,7 @@ export default function PersonaAILoginPage() {
                     />
 
                     <input
+                      data-test-id="EMAIL"
                       value={userCred.email}
                       onChange={(e) =>
                         setUserCred((pre) => ({
@@ -179,7 +182,6 @@ export default function PersonaAILoginPage() {
                           email: e.target.value,
                         }))
                       }
-                      data-test-id="EMAIL"
                       disabled={isPending}
                       type="email"
                       placeholder="Enter your email"
@@ -201,6 +203,7 @@ export default function PersonaAILoginPage() {
                     />
 
                     <input
+                      data-test-id="PASSWORD"
                       value={userCred.password}
                       onChange={(e) =>
                         setUserCred((pre) => ({
@@ -208,7 +211,6 @@ export default function PersonaAILoginPage() {
                           password: e.target.value,
                         }))
                       }
-                      data-test-id="PASSWORD"
                       disabled={isPending}
                       type="password"
                       placeholder="Enter your password"
@@ -234,10 +236,10 @@ export default function PersonaAILoginPage() {
 
                 {/* LOGIN BUTTON */}
                 <button
+                  data-test-id="SUBMIT"
                   onClick={OnSubmit}
                   className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white font-medium shadow-[0_15px_35px_rgba(99,56,246,0.35)] hover:scale-[1.01] transition-all duration-300"
                   disabled={isPending}
-                  data-test-id="SUBMIT"
                 >
                   {isPending ? (
                     <span className="flex items-center justify-center gap-2">

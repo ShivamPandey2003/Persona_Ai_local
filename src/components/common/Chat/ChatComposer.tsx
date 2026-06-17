@@ -54,7 +54,7 @@ function ChatComposer({
         onValueChange={onChange}
         onSubmit={handleSubmit}
         disabled={disabled}
-        className="border-input bg-popover relative z-10 w-full rounded-3xl border p-0 pt-1 shadow-xs"
+        className="border-input bg-popover/85 backdrop-blur-xl relative z-10 w-full rounded-3xl border p-0 pt-1 shadow-[0_8px_30px_-10px_rgba(16,24,40,0.18)]"
       >
         <div className="flex flex-col">
           <PromptInputTextarea
@@ -64,7 +64,16 @@ function ChatComposer({
           />
 
           <PromptInputActions className="mt-3 flex w-full items-center justify-between gap-2 p-2">
-            <div className="flex items-center gap-2">{leftSlot}</div>
+            {/* Stop the click from reaching PromptInput's focus-the-textarea
+                handler, which would otherwise steal focus and close any control
+                (e.g. the recipient selector) rendered here. Pointer events are
+                left alone so Radix's own open-on-pointerdown still works. */}
+            <div
+              className="flex items-center gap-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {leftSlot}
+            </div>
             <Button
               size="icon"
               disabled={!canSend}

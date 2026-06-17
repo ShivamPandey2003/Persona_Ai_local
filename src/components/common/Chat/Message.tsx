@@ -6,6 +6,7 @@ import {
   MessageContent,
 } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
+import { useTypewriter } from "@/hooks/useTypewriter";
 import { Check, Copy, Pencil } from "lucide-react";
 import { memo, useState } from "react";
 import { toast } from "sonner";
@@ -18,12 +19,15 @@ type MessageComponentProps = {
    * message text back into the composer so it can be edited and re-sent.
    */
   onEdit?: (text: string) => void;
+  /** Typewriter-reveal this message (a freshly received assistant reply). */
+  animate?: boolean;
 };
 
 export const MessageComponent = memo(
-  ({ message, isLastMessage, onEdit }: MessageComponentProps) => {
+  ({ message, isLastMessage, onEdit, animate }: MessageComponentProps) => {
     const [copied, setCopied] = useState(false);
     const isAssistant = message.userType === "Assistant";
+    const shown = useTypewriter(message.message, Boolean(animate) && isAssistant);
 
     const handleCopy = async () => {
       try {
@@ -39,7 +43,10 @@ export const MessageComponent = memo(
       <Message
         className={cn(
           "mx-auto flex w-full max-w-3xl flex-col gap-2 px-2 md:px-10",
-          isAssistant ? "items-start" : "items-end",
+          "duration-300 animate-in fade-in",
+          isAssistant
+            ? "items-start slide-in-from-left-2"
+            : "items-end slide-in-from-right-2",
         )}
       >
         {isAssistant ? (
@@ -48,7 +55,7 @@ export const MessageComponent = memo(
               className="text-foreground prose w-full min-w-0 flex-1 rounded-lg bg-transparent p-0"
               markdown
             >
-              {message.message}
+              {shown}
             </MessageContent>
             <MessageActions
               className={cn(

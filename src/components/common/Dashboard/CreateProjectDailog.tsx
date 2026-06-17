@@ -94,8 +94,8 @@ const CreateProjectDailog = () => {
                 Project Title
               </Label>
               <Input
-                data-test-id="PROJECT_TITLE"
                 id="title"
+                data-test-id="PROJECT_TITLE"
                 placeholder="e.g. EverSip Persona Study"
                 {...register("project_name")}
               />

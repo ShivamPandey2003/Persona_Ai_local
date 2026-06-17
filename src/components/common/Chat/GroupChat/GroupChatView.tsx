@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, Users } from "lucide-react";
 import type { StickToBottomContext } from "use-stick-to-bottom";
 
 import {
@@ -12,19 +12,22 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { CircularLoader } from "@/components/ui/loader";
+import { GradientRingLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
-import { personaColorStyle } from "@/lib/personaColors";
+import { personaColorStyle, personaInitials } from "@/lib/personaColors";
 
 import LoadingMessage from "../LoadingMessage";
 import ErrorMessage from "../ErrorMessage";
 import ChatComposer from "../ChatComposer";
 import ChatEnded from "../ChatEnded";
+import ChatHistorySkeleton from "../ChatHistorySkeleton";
+import ChatScrollButton from "../ChatScrollButton";
 import GroupMessage from "./GroupMessage";
+import GroupParticipants from "./GroupParticipants";
 import AssumptionsDialog from "./AssumptionsDialog";
 
 import {
@@ -36,6 +39,7 @@ import {
   useGroupMessageSingle,
   useGroupContext,
 } from "@/api/GroupChat/mutation";
+import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
 import { touchSession } from "@/lib/chatStore";
 
@@ -43,6 +47,7 @@ const ALL = "all";
 
 function GroupChatView() {
   const { groupId } = useParams();
+  const projectId = useActiveProjectId();
 
   // History is owned by the pager (grows at the front on scroll-up); messages
   // sent in this session are appended locally at the end.
@@ -53,6 +58,9 @@ function GroupChatView() {
   const [ended, setEnded] = useState(false);
   const [assumptions, setAssumptions] = useState<string[]>([]);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  // True while a broadcast's persona replies are being revealed one-by-one.
+  const [isRevealing, setIsRevealing] = useState(false);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const participantsQuery = useGroupChatParticipants(groupId);
   const broadcastMut = useGroupBroadcast(groupId ?? "");
@@ -60,11 +68,17 @@ function GroupChatView() {
   const contextMut = useGroupContext(groupId ?? "");
 
   const participants = participantsQuery.data ?? [];
-  const sending = broadcastMut.isPending || singleMut.isPending;
+  const sending = broadcastMut.isPending || singleMut.isPending || isRevealing;
 
   const messages = useMemo(
     () => [...history.messages, ...liveMessages],
     [history.messages, liveMessages],
+  );
+
+  // Replies received this session typewriter-reveal; history does not.
+  const liveIds = useMemo(
+    () => new Set(liveMessages.map((m) => m.id)),
+    [liveMessages],
   );
 
   const colorByName = useMemo(() => {
@@ -79,7 +93,17 @@ function GroupChatView() {
     setTarget(ALL);
     setEnded(false);
     setAssumptions([]);
+    setIsRevealing(false);
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
   }, [groupId]);
+
+  // Clear any pending reveal timer on unmount.
+  useEffect(
+    () => () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    },
+    [],
+  );
 
   // Scroll-up loads older history while keeping the viewport anchored.
   const stbRef = useRef<StickToBottomContext | null>(null);
@@ -114,6 +138,45 @@ function GroupChatView() {
   const appendLive = (next: GroupMessageT[]) =>
     setLiveMessages((prev) => [...prev, ...next]);
 
+  /**
+   * Reveal a broadcast's persona replies one-by-one instead of all at once:
+   * each reply is appended (and typewriters in), then the next is scheduled
+   * after roughly that reply's typing duration, so it feels like a real
+   * back-and-forth rather than a wall of simultaneous answers.
+   */
+  const revealSequentially = (
+    responses: Array<{
+      persona_name: string;
+      response: string;
+      evidence_tags?: string[];
+    }>,
+  ) => {
+    if (responses.length === 0) return;
+    setIsRevealing(true);
+    let i = 0;
+    const step = () => {
+      const r = responses[i];
+      appendLive([
+        {
+          id: crypto.randomUUID(),
+          role: "persona",
+          persona_name: r.persona_name,
+          message: r.response,
+          evidence_tags: r.evidence_tags,
+        },
+      ]);
+      i += 1;
+      if (i < responses.length) {
+        const words = (r.response.match(/\S+\s*/g) ?? []).length;
+        const delay = Math.min(words * 24 + 500, 4500);
+        revealTimerRef.current = setTimeout(step, delay);
+      } else {
+        setIsRevealing(false);
+      }
+    };
+    step();
+  };
+
   const handleSendError = (err: Error) => {
     if (/ended/i.test(err.message)) setEnded(true);
   };
@@ -130,15 +193,7 @@ function GroupChatView() {
         { message: text },
         {
           onSuccess: (data) => {
-            appendLive(
-              data.responses.map((r) => ({
-                id: crypto.randomUUID(),
-                role: "persona",
-                persona_name: r.persona_name,
-                message: r.response,
-                evidence_tags: r.evidence_tags,
-              })),
-            );
+            revealSequentially(data.responses);
             touchSession(groupId);
           },
           onError: handleSendError,
@@ -179,10 +234,9 @@ function GroupChatView() {
     );
   };
 
+  const selectedParticipant = participants.find((p) => p.persona_id === target);
   const targetName =
-    target === ALL
-      ? "Everyone"
-      : participants.find((p) => p.persona_id === target)?.persona_name;
+    target === ALL ? "Everyone" : selectedParticipant?.persona_name;
 
   if (participantsQuery.isError || history.isError) {
     return (
@@ -195,26 +249,10 @@ function GroupChatView() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden">
+    <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden duration-300 animate-in fade-in">
       {/* Header: participants + actions */}
       <div className="mx-auto flex w-full max-w-3xl shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {participants.map((p) => {
-            const style = personaColorStyle(p.color);
-            return (
-              <span
-                key={p.persona_id}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
-                  style.chip,
-                )}
-              >
-                <span className={cn("h-1.5 w-1.5 rounded-full", style.avatar)} />
-                {p.persona_name}
-              </span>
-            );
-          })}
-        </div>
+        <GroupParticipants participants={participants} projectId={projectId} />
         <div className="flex shrink-0 items-center gap-2">
           <Button
             variant="outline"
@@ -240,12 +278,12 @@ function GroupChatView() {
           {/* Top-of-list spinner while older history loads. */}
           {history.isLoadingOlder && (
             <div className="flex justify-center py-2">
-              <CircularLoader size="sm" />
+              <GradientRingLoader size="sm" />
             </div>
           )}
 
           {history.isInitialLoading ? (
-            <LoadingMessage />
+            <ChatHistorySkeleton />
           ) : messages.length === 0 ? (
             <p className="mx-auto w-full max-w-3xl px-10 text-center text-sm text-muted-foreground">
               Ask a question to hear from {participants.length || "your"} personas.
@@ -261,11 +299,14 @@ function GroupChatView() {
                     : undefined
                 }
                 onEdit={ended ? undefined : handleEditMessage}
+                animate={liveIds.has(message.id)}
               />
             ))
           )}
 
           {sending && <LoadingMessage />}
+
+          <ChatScrollButton />
         </ChatContainerContent>
       </ChatContainerRoot>
 
@@ -285,14 +326,62 @@ function GroupChatView() {
         }
         leftSlot={
           <Select value={target} onValueChange={setTarget} disabled={ended}>
-            <SelectTrigger size="sm" className="max-w-[180px]">
-              <SelectValue placeholder="Everyone" />
+            <SelectTrigger
+              size="sm"
+              aria-label="Choose who to message"
+              className="max-w-[210px] gap-2 pl-1.5"
+            >
+              {target === ALL ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Users className="size-3" />
+                  </span>
+                  <span className="text-xs font-medium">Everyone</span>
+                </span>
+              ) : (
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold",
+                      personaColorStyle(selectedParticipant?.color).avatar,
+                    )}
+                  >
+                    {personaInitials(selectedParticipant?.persona_name)}
+                  </span>
+                  <span className="truncate text-xs font-medium">
+                    {selectedParticipant?.persona_name}
+                  </span>
+                </span>
+              )}
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>Everyone</SelectItem>
+            <SelectContent
+              position="popper"
+              side="top"
+              sideOffset={6}
+              className="max-h-72"
+            >
+              <SelectItem value={ALL}>
+                <span className="flex items-center gap-2">
+                  <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Users className="size-3" />
+                  </span>
+                  Everyone
+                </span>
+              </SelectItem>
+              <SelectSeparator />
               {participants.map((p) => (
                 <SelectItem key={p.persona_id} value={p.persona_id}>
-                  {p.persona_name}
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold",
+                        personaColorStyle(p.color).avatar,
+                      )}
+                    >
+                      {personaInitials(p.persona_name)}
+                    </span>
+                    {p.persona_name}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

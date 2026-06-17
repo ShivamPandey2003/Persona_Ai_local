@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { CircularLoader } from "@/components/ui/loader";
+import { GradientRingLoader, TextShimmerLoader } from "@/components/ui/loader";
 import PersonaPanel from "./PersonaPanel";
 
 import { usePersonaList } from "@/api/Persona/query";
@@ -15,23 +15,13 @@ import { queryClient } from "@/provider";
 
 function CenteredLoader({ text }: { text: string }) {
   return (
-    <div className="flex h-[calc(100vh-90px)] flex-col items-center justify-center gap-3">
-      <CircularLoader size="lg" />
-      <p className="text-sm text-muted-foreground">{text}</p>
+    <div className="flex h-[calc(100vh-90px)] flex-col items-center justify-center gap-4 duration-300 animate-in fade-in">
+      <GradientRingLoader size="lg" />
+      <TextShimmerLoader text={text} />
     </div>
   );
 }
 
-/**
- * Opens (or resumes) a persona-builder conversation for a project, then
- * redirects to /chat/:conversationId.
- *
- * The start request is issued directly (not via a React Query mutation) and we
- * navigate off the resolved promise. This sidesteps React StrictMode's
- * mount→unmount→remount, which would otherwise deliver a mutation result to a
- * disposed observer and leave the view stuck on the loader. A per-attempt ref
- * guard prevents StrictMode from firing the request twice.
- */
 function BuilderEntry({
   projectId,
   forceNew,
@@ -50,7 +40,6 @@ function BuilderEntry({
     setFailed(false);
 
     (async () => {
-      // Resume an active builder conversation instead of starting a new one.
       if (!forceNew) {
         const existing = findActiveBuilderSession(projectId);
         if (existing) {
@@ -60,7 +49,6 @@ function BuilderEntry({
       }
 
       try {
-        // /chat/start was merged into /chat/message, selected by flow="start".
         const data = await postApi<BuilderChatTurnResponse>("persona/chat/message", {
           token: getAuthToken(),
           flow: "start",
@@ -73,7 +61,6 @@ function BuilderEntry({
             projectId,
             title: "New persona chat",
           });
-          // Surface the new conversation in the sidebar Recents (chat-list).
           queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
           navigate(`/chat/${data.id}`, {
             state: { projectId },
@@ -83,11 +70,9 @@ function BuilderEntry({
           setFailed(true);
         }
       } catch {
-        // postApi already surfaces a toast; offer a retry.
         setFailed(true);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
 
   if (failed) {
@@ -106,19 +91,12 @@ function BuilderEntry({
   return <CenteredLoader text="Starting persona builder…" />;
 }
 
-/**
- * Landing view for /chat. Decides what to show for the active project:
- *  - personas exist  → the persona dashboard (chat with one / group chat)
- *  - no personas yet → resume/start a persona-builder conversation
- * The sidebar "New chat" passes `forceNew` to always begin a new builder chat.
- */
 function ChatEntry() {
   const navigate = useNavigate();
   const { state } = useLocation();
   const projectId = useActiveProjectId();
   const forceNew = Boolean((state as { forceNew?: boolean } | null)?.forceNew);
 
-  // Skip the persona lookup entirely when forcing a brand-new chat.
   const personasQuery = usePersonaList(forceNew ? undefined : projectId);
 
   if (!projectId) {
@@ -148,12 +126,13 @@ function ChatEntry() {
     return <BuilderEntry key={projectId} projectId={projectId} forceNew={false} />;
   }
 
-  // Persona dashboard.
   return (
-    <div className="mx-auto flex h-[calc(100vh-90px)] w-full max-w-5xl flex-col gap-4 px-4">
+    <div className="mx-auto flex h-[calc(100vh-90px)] w-full max-w-5xl flex-col gap-4 px-4 duration-300 animate-in fade-in">
       <div className="flex items-center justify-between gap-4 pt-2">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Personas</h2>
+          <h2 className="text-gradient-brand w-fit text-lg font-semibold">
+            Personas
+          </h2>
           <p className="text-xs text-muted-foreground">
             Chat with a persona, or select several for a group chat.
           </p>

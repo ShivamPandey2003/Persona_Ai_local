@@ -27,7 +27,7 @@ const DashboardPage = () => {
   const pageCount = pagination?.total_pages ?? 0;
 
   return (
-    <div className="w-full max-w-6xl mx-auto py-6 p-4 md:p-4">
+    <div className="w-full max-w-6xl mx-auto py-6 p-4 md:p-4 duration-300 animate-in fade-in slide-in-from-bottom-1">
       <DataTable
         columns={Column}
         data={projects}

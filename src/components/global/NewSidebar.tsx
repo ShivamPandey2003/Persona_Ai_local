@@ -57,7 +57,7 @@ export function NewAppSidebar() {
       className="border-r border-[#E5E7EB] font-sans"
     >
       {/* HEADER: Logo & Brand */}
-      <SidebarHeader className="px-3 transition-all">
+      <SidebarHeader className="py-1! px-3 transition-all">
         <div
           className={cn(
             "flex items-center gap-2.5 px-1 select-none cursor-pointer transition-all",
@@ -75,8 +75,8 @@ export function NewAppSidebar() {
       </SidebarHeader>
 
       {/* CONTENT: Core Navigation Options */}
-      <SidebarContent className="px-2 space-y-4">
-        <SidebarGroup className="p-0">
+      <SidebarContent className="px-2 space-y-4 overflow-hidden">
+        <SidebarGroup className="p-0 shrink-0">
           <SidebarGroupLabel className="px-3 text-xs font-semibold text-[#6B7280] tracking-wider mb-2 group-data-[collapsible=icon]:hidden">
             Navigation
           </SidebarGroupLabel>
@@ -148,21 +148,30 @@ export function NewAppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Recents history section auto-hidden when icon mode is active */}
+        {/* Recents history section auto-hidden when icon mode is active.
+            Fills the remaining space; only this list scrolls (the nav block
+            above stays fixed). */}
         {inChat && (
-          <SidebarGroup className="px-2 group-data-[collapsible=icon]:hidden">
-            <span className="text-xs font-semibold text-[#6B7280] tracking-wider block mb-2">
+          <SidebarGroup className="px-2 min-h-0 flex-1 group-data-[collapsible=icon]:hidden">
+            <span className="text-xs font-semibold text-[#6B7280] tracking-wider block mb-2 shrink-0">
               Recents
             </span>
             {isLoading ? (
               <p className="text-xs text-[#9CA3AF] px-1 italic">Loading…</p>
             ) : sessions.length ? (
-              <ScrollArea className="flex-1 overflow-hidden">
+              <ScrollArea className="min-h-0 flex-1">
                 <SidebarMenu>
-                  {sessions.map((session) => {
+                  {sessions.map((session, index) => {
                     const Icon = session.kind === "group" ? Users : MessageSquare;
                     return (
-                      <SidebarMenuItem key={session.id}>
+                      <SidebarMenuItem
+                        key={session.id}
+                        style={{
+                          animationDelay: `${Math.min(index, 10) * 30}ms`,
+                          animationFillMode: "backwards",
+                        }}
+                        className="duration-300 animate-in fade-in slide-in-from-left-1"
+                      >
                         <SidebarMenuButton
                           asChild
                           isActive={session.id === activeId}

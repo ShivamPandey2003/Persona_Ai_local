@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 export interface LoaderProps {
   variant?:
     | "circular"
+    | "gradient"
     | "classic"
     | "pulse"
     | "pulse-dot"
@@ -39,6 +40,40 @@ export function CircularLoader({
         sizeClasses[size],
         className
       )}
+    >
+      <span className="sr-only">Loading</span>
+    </div>
+  )
+}
+
+/**
+ * Sleek brand gradient ring spinner — a conic-gradient circle masked into a
+ * ring (no border), spun with Tailwind's `animate-spin`. Pure CSS.
+ */
+export function GradientRingLoader({
+  className,
+  size = "md",
+}: {
+  className?: string
+  size?: "sm" | "md" | "lg"
+}) {
+  const px = { sm: 18, md: 38, lg: 56 }[size]
+  const thickness = { sm: 3, md: 4, lg: 5 }[size]
+  const ringMask = `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 calc(100% - ${thickness}px))`
+
+  return (
+    <div
+      role="status"
+      aria-label="Loading"
+      className={cn("animate-spin rounded-full", className)}
+      style={{
+        width: px,
+        height: px,
+        background:
+          "conic-gradient(from 90deg at 50% 50%, transparent 0deg, #6338F6 250deg, #8B5CF6 360deg)",
+        WebkitMask: ringMask,
+        mask: ringMask,
+      }}
     >
       <span className="sr-only">Loading</span>
     </div>
@@ -466,6 +501,8 @@ function Loader({
   switch (variant) {
     case "circular":
       return <CircularLoader size={size} className={className} />
+    case "gradient":
+      return <GradientRingLoader size={size} className={className} />
     case "classic":
       return <ClassicLoader size={size} className={className} />
     case "pulse":

@@ -121,7 +121,11 @@ const EditProjectDialog = () => {
             <Button type="button" variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button data-test-id="EDIT_SUBMIT_PROJECT" type="submit" disabled={isPending}>
+            <Button
+              data-test-id="EDIT_SUBMIT_PROJECT"
+              type="submit"
+              disabled={isPending}
+            >
               {isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>

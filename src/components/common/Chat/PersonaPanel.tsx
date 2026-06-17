@@ -1,15 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
-import { BarChart3, CheckCircle2, MessageSquare, Users, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  BarChart3,
+  CheckCircle2,
+  MessageSquare,
+  Pencil,
+  Users,
+  XCircle,
+} from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CircularLoader } from "@/components/ui/loader";
+import EmptyState from "@/components/common/EmptyState";
 
 import { usePersonaList, usePersonaDashboard } from "@/api/Persona/query";
+import { usePersonaUpdate } from "@/api/Persona/mutation";
 import { useStartGroupChat } from "@/api/GroupChat/mutation";
+import { useCountUp } from "@/hooks/useCountUp";
 import { personaInitials } from "@/lib/personaColors";
 import { cn } from "@/lib/utils";
 
@@ -228,14 +240,18 @@ function SummaryCard({
   label: string;
   iconBg: string;
 }) {
+  const display = useCountUp(value);
   return (
-    <Card className="h-fit">
+    <Card className="h-fit transition-shadow duration-200 hover:shadow-md">
       <CardContent className="flex items-center gap-3">
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", iconBg)}>
           {icon}
         </div>
         <div>
-          <p className="text-2xl font-semibold text-foreground">{value}</p>
+          {/* Number ticks up to its value (count-up animation). */}
+          <p className="text-2xl font-semibold tabular-nums text-foreground">
+            {display}
+          </p>
           <p className="text-xs text-muted-foreground">{label}</p>
         </div>
       </CardContent>
@@ -307,6 +323,27 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
   const toggle = (personaId: string) =>
     setSelected((prev) => ({ ...prev, [personaId]: !prev[personaId] }));
 
+  // Inline persona rename.
+  const updatePersona = usePersonaUpdate(projectId);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const cancelRenameRef = useRef(false);
+
+  const startRename = (id: string, name: string | null) => {
+    setEditingId(id);
+    setDraft(name ?? "");
+  };
+
+  const submitRename = (id: string, currentName: string | null) => {
+    const name = draft.trim();
+    setEditingId(null);
+    if (!name || name.length < 2 || name === (currentName ?? "")) return;
+    updatePersona.mutate(
+      { personaId: id, personaName: name },
+      { onSuccess: () => toast.success("Persona renamed") },
+    );
+  };
+
   return (
     <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -332,27 +369,44 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
 
       <ScrollArea className={scrollHeight}>
         {personasQuery.isLoading ? (
-          <div className="flex h-[400px] items-center justify-center">
-            <CircularLoader size="lg" />
+          <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={`persona-skeleton-${i}`} className="flex flex-col">
+                <CardContent className="flex flex-1 flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-3 w-1/3" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                  <Skeleton className="mt-auto h-9 w-full rounded-md" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
         ) : personas.length === 0 ? (
-          <div className="flex h-[400px] flex-col items-center justify-center gap-1 text-center">
-            <Users className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">No personas yet</p>
-            <p className="text-xs text-muted-foreground">
-              Use the persona-builder chat to create personas first.
-            </p>
-          </div>
+          <EmptyState
+            className="h-[400px] justify-center"
+            icon={<Users className="h-6 w-6" />}
+            title="No personas yet"
+            description="Use the persona-builder chat to create personas first."
+          />
         ) : (
           <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
-            {personas.map((persona) => {
+            {personas.map((persona, index) => {
               const isSelected = Boolean(selected[persona.persona_id]);
               const isPending = pendingId === persona.persona_id;
               return (
                 <Card
                   key={persona.persona_id}
+                  style={{
+                    animationDelay: `${Math.min(index, 12) * 40}ms`,
+                    animationFillMode: "backwards",
+                  }}
                   className={cn(
-                    "flex flex-col transition-shadow",
+                    "flex flex-col transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 hover:shadow-md",
                     isSelected && "ring-2 ring-primary",
                   )}
                 >
@@ -362,10 +416,57 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
                           {personaInitials(persona.persona_name)}
                         </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold leading-snug text-foreground">
-                            {persona.persona_name ?? "Untitled persona"}
-                          </p>
+                        <div className="min-w-0 flex-1">
+                          {editingId === persona.persona_id ? (
+                            <input
+                              autoFocus
+                              value={draft}
+                              maxLength={150}
+                              disabled={updatePersona.isPending}
+                              onChange={(e) => setDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  e.currentTarget.blur();
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  cancelRenameRef.current = true;
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              onBlur={() => {
+                                if (cancelRenameRef.current) {
+                                  cancelRenameRef.current = false;
+                                  setEditingId(null);
+                                  return;
+                                }
+                                submitRename(
+                                  persona.persona_id,
+                                  persona.persona_name,
+                                );
+                              }}
+                              className="w-full rounded-md border border-input bg-background px-1.5 py-0.5 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            />
+                          ) : (
+                            <div className="group/name flex items-center gap-1">
+                              <p className="truncate text-sm font-semibold leading-snug text-foreground">
+                                {persona.persona_name ?? "Untitled persona"}
+                              </p>
+                              <button
+                                type="button"
+                                aria-label="Rename persona"
+                                onClick={() =>
+                                  startRename(
+                                    persona.persona_id,
+                                    persona.persona_name,
+                                  )
+                                }
+                                className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/name:opacity-100"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
                           <p className="mt-0.5 text-xs capitalize text-muted-foreground">
                             {persona.status}
                           </p>
@@ -396,7 +497,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                           <div className="h-2 flex-1 rounded-full bg-secondary">
                             <div
                               className={cn(
-                                "h-2 rounded-full transition-all",
+                                "h-2 rounded-full transition-all animate-[coverage-grow_0.8s_ease-out]",
                                 coverageColor(persona.coverage),
                               )}
                               style={{ width: `${persona.coverage}%` }}

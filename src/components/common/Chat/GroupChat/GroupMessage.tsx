@@ -10,6 +10,7 @@ import {
   MessageContent,
 } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
+import { useTypewriter } from "@/hooks/useTypewriter";
 import { personaColorStyle, personaInitials } from "@/lib/personaColors";
 
 type GroupMessageProps = {
@@ -21,12 +22,15 @@ type GroupMessageProps = {
    * message text back into the composer so it can be edited and re-sent.
    */
   onEdit?: (text: string) => void;
+  /** Typewriter-reveal this message (a freshly received persona reply). */
+  animate?: boolean;
 };
 
 /** Renders one group-chat turn: a right-aligned user bubble or a labelled persona reply. */
-const GroupMessage = memo(({ message, color, onEdit }: GroupMessageProps) => {
+const GroupMessage = memo(({ message, color, onEdit, animate }: GroupMessageProps) => {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const shown = useTypewriter(message.message, Boolean(animate) && !isUser);
 
   const handleCopy = async () => {
     try {
@@ -53,7 +57,7 @@ const GroupMessage = memo(({ message, color, onEdit }: GroupMessageProps) => {
 
   if (isUser) {
     return (
-      <Message className="group mx-auto flex w-full max-w-3xl flex-col items-end gap-1 px-2 md:px-10">
+      <Message className="group mx-auto flex w-full max-w-3xl flex-col items-end gap-1 px-2 duration-300 animate-in fade-in slide-in-from-right-2 md:px-10">
         <MessageContent className="bg-muted text-primary max-w-[85%] rounded-3xl px-5 py-2.5 whitespace-pre-wrap sm:max-w-[75%]">
           {message.message}
         </MessageContent>
@@ -79,7 +83,7 @@ const GroupMessage = memo(({ message, color, onEdit }: GroupMessageProps) => {
   const style = personaColorStyle(color);
 
   return (
-    <Message className="group mx-auto flex w-full max-w-3xl flex-row items-start gap-3 px-2 md:px-10">
+    <Message className="group mx-auto flex w-full max-w-3xl flex-row items-start gap-3 px-2 duration-300 animate-in fade-in slide-in-from-left-2 md:px-10">
       <div
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
@@ -96,7 +100,7 @@ const GroupMessage = memo(({ message, color, onEdit }: GroupMessageProps) => {
           markdown
           className="text-foreground prose w-full min-w-0 rounded-lg bg-transparent p-0"
         >
-          {message.message}
+          {shown}
         </MessageContent>
         {message.evidence_tags && message.evidence_tags.length > 0 && (
           <div className="mt-0.5 flex flex-wrap gap-1.5">

@@ -22,7 +22,11 @@ const Column: ColumnDef<Project, any>[] = [
     cell: ({ row, getValue }) => {
       const ProjectId = row.original.project_id;
       return (
-        <Link data-test-id={`PROJECT_TITLE_${getValue()}`} to={"/chat"} state={{ projectId: ProjectId }}>
+        <Link
+          data-test-id={`PROJECT_TITLE_${getValue()}`}
+          to={"/chat"}
+          state={{ projectId: ProjectId }}
+        >
           <div className="w-full cursor-pointer py-1">{getValue()}</div>
         </Link>
       );
