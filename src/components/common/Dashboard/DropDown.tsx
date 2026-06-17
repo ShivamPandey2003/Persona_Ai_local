@@ -26,7 +26,10 @@ export function Dropdown({ project }: Props) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline">
+        <Button
+          variant="outline"
+          data-test-id={`ACTION_${project.project_name}`}
+        >
           <EllipsisVertical />
         </Button>
       </DropdownMenuTrigger>
@@ -34,11 +37,16 @@ export function Dropdown({ project }: Props) {
         <DropdownMenuItem className="cursor-pointer" onClick={openProject}>
           Open project
         </DropdownMenuItem>
-        <DropdownMenuItem className="cursor-pointer" onClick={() => dispatch(setProjectEdit(project))}>
+        <DropdownMenuItem
+          data-test-id={`ACTION_EDIT`}
+          className="cursor-pointer"
+          onClick={() => dispatch(setProjectEdit(project))}
+        >
           Edit
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer">Settings</DropdownMenuItem>
         <DropdownMenuItem
+          data-test-id={`ACTION_DELETE`}
           className="text-destructive focus:text-destructive cursor-pointer"
           onClick={() => dispatch(setProjectDelete(project.project_id))}
         >

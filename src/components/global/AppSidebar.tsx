@@ -35,10 +35,10 @@ export function AppSidebar() {
       className="border-r border-[#F1F1F1] bg-white transition-all duration-300"
     >
       {/* SIDEBAR HEADER: LOGO & BRAND NAME */}
-      <SidebarHeader className="py-5 px-4 bg-white">
+      <SidebarHeader className="py-0! px-4 bg-white">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild className="hover:bg-transparent p-0">
+            <SidebarMenuButton asChild className="hover:bg-transparent p-0!">
               <Link to="/dashboard" className="flex items-center gap-3 overflow-hidden shrink-0 select-none [&_svg]:size-12!">
                   <Logo size={45} />
                 {/* Smooth text appearance when sidebar unfolds */}

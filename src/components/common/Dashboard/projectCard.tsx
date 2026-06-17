@@ -6,7 +6,14 @@ import { memo } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router";
 
-const ProjectCard = ({ project }: { project: Project }) => {
+const ProjectCard = ({
+  project,
+  index = 0,
+}: {
+  project: Project;
+  /** Position in the grid, used to stagger the entrance animation. */
+  index?: number;
+}) => {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const fileCount = project.total_files_count;
@@ -33,14 +40,18 @@ const ProjectCard = ({ project }: { project: Project }) => {
           openProject();
         }
       }}
-      className="group relative flex cursor-pointer flex-col gap-2 rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      style={{
+        animationDelay: `${Math.min(index, 12) * 40}ms`,
+        animationFillMode: "backwards",
+      }}
+      className="group relative flex cursor-pointer flex-col gap-2 rounded-2xl border border-border bg-card p-6 transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:translate-y-0"
     >
-      {/* Delete icon (top-right) */}
+      {/* Delete icon (top-right) — revealed on hover/focus. */}
       <button
         type="button"
         onClick={handleDelete}
         aria-label="Delete project"
-        className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all duration-200 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
       >
         <Trash2 className="h-4 w-4" />
       </button>

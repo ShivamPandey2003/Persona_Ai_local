@@ -35,10 +35,10 @@ const Rootlayout = () => {
         <NewAppSidebar />
         
         <SidebarInset className="bg-white flex-1 flex flex-col min-w-0 max-h-screen overflow-hidden">
-          <header className="h-14 border-b border-[#F1F1F1] px-6 flex items-center justify-between shrink-0">
+          <header className="sticky top-0 z-30 h-14 border-b border-[#F1F1F1] px-6 flex items-center justify-between shrink-0 bg-white/70 backdrop-blur-md supports-[backdrop-filter]:bg-white/60">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
-              <span className="text-sm font-medium text-[#111827] ml-2">
+              <span data-test-id={getPageTitle()} className="text-sm font-medium text-[#111827] ml-2">
                 {getPageTitle()}
               </span>
             </div>

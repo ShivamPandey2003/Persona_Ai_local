@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CircularLoader } from "@/components/ui/loader";
 import { Plus, RotateCcw, Save, X } from "lucide-react";
 import { toast } from "sonner";
@@ -75,15 +76,37 @@ export default function SettingsPage() {
   }, [settings, form]);
 
   if (isLoading || !form) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center">
-        {isError ? (
+    if (isError) {
+      return (
+        <div className="flex h-[60vh] items-center justify-center">
           <p className="text-sm text-muted-foreground">
             Couldn't load your settings. Please try again.
           </p>
-        ) : (
-          <CircularLoader size="lg" />
-        )}
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-screen">
+        <div className="container mx-auto max-w-4xl px-4 py-4">
+          <div className="mb-8 space-y-2">
+            <Skeleton className="h-9 w-40" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <div className="space-y-6">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="space-y-2">
+                  <Skeleton className="h-5 w-44" />
+                  <Skeleton className="h-3 w-72" />
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-2/3" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -125,11 +148,13 @@ export default function SettingsPage() {
   const activeScenario = SCENARIO_MODES.find((m) => m.value === form.scenario_mode);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen duration-300 animate-in fade-in slide-in-from-bottom-1">
       <div className="container mx-auto max-w-4xl px-4 py-4">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight">Settings</h1>
+          <h1 className="text-gradient-brand w-fit text-4xl font-bold tracking-tight">
+            Settings
+          </h1>
           <p className="mt-2 text-muted-foreground">
             Configure your analysis context and display preferences
           </p>

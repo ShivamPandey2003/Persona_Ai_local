@@ -87,6 +87,7 @@ const EditProjectDialog = () => {
                 Project Title
               </Label>
               <Input
+                data-test-id="EDIT_PROJECT_TITLE"
                 id="edit-project-title"
                 placeholder="e.g. EverSip Persona Study"
                 {...register("project_name")}
@@ -103,6 +104,7 @@ const EditProjectDialog = () => {
                 Project Description
               </Label>
               <Input
+                data-test-id="EDIT_PROJECT_DESCRIPTION"
                 id="edit-project-description"
                 placeholder="e.g. EverSip Persona Study is about..."
                 {...register("description")}
@@ -119,7 +121,11 @@ const EditProjectDialog = () => {
             <Button type="button" variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button
+              data-test-id="EDIT_SUBMIT_PROJECT"
+              type="submit"
+              disabled={isPending}
+            >
               {isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>

@@ -18,7 +18,14 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, Search, Table as TableIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import EmptyState from "@/components/common/EmptyState";
+import {
+  FolderOpen,
+  LayoutGrid,
+  Search,
+  Table as TableIcon,
+} from "lucide-react";
 import ProjectCard from "./projectCard";
 import { cn } from "@/lib/utils";
 import CreateProjectDailog from "./CreateProjectDailog";
@@ -141,7 +148,10 @@ export function DataTable<TData, TValue>({
       {/* VIEWPORT AREA */}
       <TabsContent value="Table" className="mt-0 outline-none">
         <div className="bg-white rounded-lg border border-white/60 shadow-[0_15px_50px_rgba(99,56,246,0.04)] overflow-hidden">
-          <Table containerClassName="max-h-[60vh] overflow-y-auto">
+          <Table
+            data-test-id="DASHBOARD"
+            containerClassName="max-h-[60vh] overflow-y-auto"
+          >
             <TableHeader className="sticky top-0 z-20 bg-gradient-to-br from-[#eef1ff] via-[#f8f9ff] to-[#e8ecff] border-b border-[#F1F1F1] [&_tr]:bg-transparent">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
@@ -165,12 +175,35 @@ export function DataTable<TData, TValue>({
               ))}
             </TableHeader>
             <TableBody>
-              {(table.getRowModel().rows?.length && !isFetching) ? (
-                table.getRowModel().rows.map((row) => (
+              {isFetching && data.length === 0 ? (
+                // Skeleton rows on the first load (keepPreviousData covers paging).
+                Array.from({ length: 6 }).map((_, rowIdx) => (
+                  <TableRow
+                    key={`skeleton-${rowIdx}`}
+                    className="border-b border-[#F1F1F1] last:border-none"
+                  >
+                    {Array.from({ length: columns.length }).map(
+                      (__, cellIdx) => (
+                        <TableCell
+                          key={cellIdx}
+                          className="py-4 first:pl-8 last:pr-8"
+                        >
+                          <Skeleton className="h-4 w-full max-w-[180px]" />
+                        </TableCell>
+                      ),
+                    )}
+                  </TableRow>
+                ))
+              ) : table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row, index) => (
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && "selected"}
-                    className="border-b border-[#F1F1F1] last:border-none hover:bg-[#F8F9FF]/50 transition-colors"
+                    style={{
+                      animationDelay: `${Math.min(index, 12) * 30}ms`,
+                      animationFillMode: "backwards",
+                    }}
+                    className="border-b border-[#F1F1F1] last:border-none hover:bg-[#F8F9FF]/50 transition-colors duration-200 animate-in fade-in slide-in-from-bottom-1"
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
@@ -186,12 +219,17 @@ export function DataTable<TData, TValue>({
                   </TableRow>
                 ))
               ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-32 text-center text-[#6B7280]"
-                  >
-                    {isFetching ? "Loading projects…" : "No projects found."}
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={columns.length} className="p-0">
+                    <EmptyState
+                      icon={<FolderOpen className="h-6 w-6" />}
+                      title="No projects found"
+                      description={
+                        search
+                          ? "Try a different search term."
+                          : "Create your first project to start building personas."
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               )}
@@ -202,9 +240,44 @@ export function DataTable<TData, TValue>({
 
       <TabsContent value="Card" className="mt-0 outline-none">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {table.getRowModel().rows.map((p) => (
-            <ProjectCard key={p.id} project={p.original as any} />
-          ))}
+          {isFetching && data.length === 0 ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={`card-skeleton-${i}`}
+                className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-6"
+              >
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5" />
+                <div className="flex gap-2 pt-1">
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                  <Skeleton className="h-6 w-24 rounded-full" />
+                </div>
+              </div>
+            ))
+          ) : data.length === 0 ? (
+            <div className="col-span-full">
+              <EmptyState
+                icon={<FolderOpen className="h-6 w-6" />}
+                title="No projects found"
+                description={
+                  search
+                    ? "Try a different search term."
+                    : "Create your first project to start building personas."
+                }
+              />
+            </div>
+          ) : (
+            table
+              .getRowModel()
+              .rows.map((p, index) => (
+                <ProjectCard
+                  key={p.id}
+                  project={p.original as any}
+                  index={index}
+                />
+              ))
+          )}
         </div>
       </TabsContent>
 
