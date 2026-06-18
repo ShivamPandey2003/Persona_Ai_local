@@ -1,3 +1,4 @@
+import { getAuthToken } from "@/lib/api";
 import { apiRequest } from "@/services/apiService";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
@@ -38,9 +39,7 @@ export const getProjectList = (
   offset: number = 0,
   limit: number = PROJECTS_PAGE_SIZE,
 ) => {
-  const userStr = localStorage.getItem("user");
-  const userData = userStr ? JSON.parse(atob(userStr)) : null;
-  const token = userData?.token || "";
+  const token = getAuthToken();
 
   return useQuery<GetProjectListRes, Record<string, any>>({
     queryKey: ["ProjectList", search, offset, limit],
@@ -70,9 +69,7 @@ type GetProjectRes = {
  * available, so it only fires once we know which project to load.
  */
 export const useProjectDetail = (projectId: string | undefined) => {
-  const userStr = localStorage.getItem("user");
-  const userData = userStr ? JSON.parse(atob(userStr)) : null;
-  const token = userData?.token || "";
+  const token = getAuthToken();
 
   return useQuery<Project>({
     queryKey: ["ProjectDetail", projectId],

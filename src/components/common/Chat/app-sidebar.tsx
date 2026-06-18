@@ -26,10 +26,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const {id} = useParams();
 
-  const state = location.state as { projectId: string };
+  const state = location.state as { projectId: string } | null;
 
   const Chats = React.useMemo(() => {
-      if (!state.projectId) {
+      if (!state?.projectId) {
         return [];
       }
   
@@ -69,7 +69,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={item.id === id} className="data-active:bg-primary! data-active:text-white">
-                      <Link to={`/chat/${item.id}`} state={{projectId:state.projectId}}>{item.title}</Link>
+                      <Link to={`/chat/${item.id}`} state={{projectId:state?.projectId}}>{item.title}</Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

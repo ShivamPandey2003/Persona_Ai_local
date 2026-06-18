@@ -17,7 +17,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const isAuthenticated = !!token;
 
   if (!isAuthenticated) {
-    localStorage.clear();
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
   }
 
   if (reverse) {

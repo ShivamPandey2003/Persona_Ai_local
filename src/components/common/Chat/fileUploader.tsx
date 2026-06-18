@@ -67,10 +67,11 @@ export function FileUploader({ files, setFiles, onSubmit }: FileUploaderProps) {
           Supports PDF, DOCX, XLSX, CSV, PPTX, PNG, JPG
         </div>
 
-        <input
+         <input
           ref={inputRef}
           type="file"
           multiple
+          accept=".pdf,.docx,.xlsx,.csv,.pptx,.png,.jpg,.jpeg"
           onChange={onChange}
           className="hidden"
         />

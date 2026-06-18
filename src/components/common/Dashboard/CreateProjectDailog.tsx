@@ -25,11 +25,11 @@ import RoleCard from "./RoleCard";
 // import { setProjects } from "@/redux/ProjectSlice";
 // import { formatCurrentDate } from "@/data/DummyFunc";
 // import { useNavigate } from "react-router";
-import { CreateProject } from "@/api/Projects/mutation";
+import { useCreateProject } from "@/api/Projects/mutation";
 
 const CreateProjectDailog = () => {
   const [open, setOpen] = React.useState<boolean>(false);
-  const { mutate } = CreateProject(() => setOpen(false));
+  const { mutate } = useCreateProject(() => setOpen(false));
 
   const {
     register,

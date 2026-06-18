@@ -86,7 +86,7 @@ function ConversationPromptInput() {
       const textarea = composerRef.current?.querySelector("textarea");
       if (textarea) {
         textarea.focus();
-        const end = textarea.value.length;
+        const end = text.length;
         textarea.setSelectionRange(end, end);
       }
     });
@@ -137,9 +137,12 @@ function ConversationPromptInput() {
               message: data.messages?.[0]?.content ?? "",
             },
           ]);
-          touchSession(conversationId, {
-            title: isFirstUserMessage ? snippet(text) : undefined,
-          });
+           if (isFirstUserMessage) {
+            touchSession(conversationId, { title: snippet(text) });
+            if (projectId) {
+              queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
+            }
+          }
           // final_result present => build complete: auto-end + show personas.
           if (data.final_result) finishConversation();
         },

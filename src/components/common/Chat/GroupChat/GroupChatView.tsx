@@ -129,7 +129,7 @@ function GroupChatView() {
       const textarea = composerRef.current?.querySelector("textarea");
       if (textarea) {
         textarea.focus();
-        const end = textarea.value.length;
+        const end = text.length;
         textarea.setSelectionRange(end, end);
       }
     });
