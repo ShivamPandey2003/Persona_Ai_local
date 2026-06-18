@@ -20,6 +20,12 @@ export type ChatSession = {
   personaIds?: string[];
   /** True once the conversation/group has been ended. */
   ended?: boolean;
+  /**
+   * persona_query background job id returned when a builder chat finishes
+   * building (builder kind only). Kept so the "Building Your Personas…" progress
+   * can resume after a navigation/refresh. Cleared once the job completes.
+   */
+  queryJobId?: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -82,10 +88,10 @@ export function upsertSession(
   return session;
 }
 
-/** Bump a session's updatedAt (and optionally patch title/ended) without other changes. */
+/** Bump a session's updatedAt (and optionally patch title/ended/queryJobId) without other changes. */
 export function touchSession(
   id: string,
-  patch?: Partial<Pick<ChatSession, "title" | "ended">>,
+  patch?: Partial<Pick<ChatSession, "title" | "ended" | "queryJobId">>,
 ): void {
   const existing = getSession(id);
   if (!existing) return;

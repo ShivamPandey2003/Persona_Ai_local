@@ -17,8 +17,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CircularLoader } from "@/components/ui/loader";
 import EmptyState from "@/components/common/EmptyState";
+import PersonaEvidence from "./PersonaEvidence";
 
-import { usePersonaList, usePersonaDashboard } from "@/api/Persona/query";
+import {
+  usePersonaList,
+  usePersonaDashboard,
+  type DashboardPersona,
+} from "@/api/Persona/query";
 import { usePersonaUpdate } from "@/api/Persona/mutation";
 import { useStartGroupChat } from "@/api/GroupChat/mutation";
 import { useCountUp } from "@/hooks/useCountUp";
@@ -45,61 +50,6 @@ function groupTitle(names: string[]): string {
 }
 
 /**
- * Humanise a taxonomy id for display:
- *   "brand.equity_positioning" -> "Equity Positioning"
- *   "digital_tools_services"   -> "Digital Tools Services"
- */
-function humanizeToken(raw: string): string {
-  const tail = raw.includes(".") ? raw.slice(raw.indexOf(".") + 1) : raw;
-  return tail
-    .split(/[_\s]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-/** Demographic keys -> display labels, in render order. */
-const DEMOGRAPHIC_LABELS: Array<[keyof PersonaDemographics, string]> = [
-  ["age_group", "Age"],
-  ["gender", "Gender"],
-  ["income", "Income"],
-  ["country", "Country"],
-  ["ethnicity", "Ethnicity"],
-  ["marital_status", "Marital status"],
-  ["primary_shopper_household", "Primary shopper"],
-];
-
-/** Non-empty demographic [label, value] pairs for a persona. */
-function demographicEntries(data?: PersonaDemographics | null): Array<[string, string]> {
-  if (!data) return [];
-  return DEMOGRAPHIC_LABELS.map(
-    ([key, label]) => [label, data[key]] as [string, string | null | undefined],
-  ).filter((e): e is [string, string] => e[1] != null && e[1] !== "");
-}
-
-/** A labelled row of chips, hidden when there are no items. */
-function DetailChips({ label, items }: { label: string; items?: string[] | null }) {
-  if (!items || items.length === 0) return null;
-  return (
-    <div>
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map((item) => (
-          <span
-            key={item}
-            className="rounded-md bg-secondary px-2 py-0.5 text-xs text-foreground"
-          >
-            {humanizeToken(item)}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
  * True when a persona came from the persona-builder agent (vs. data-file
  * generation). Builder personas have no meaningful coverage/confidence, so
  * those columns are hidden for them.
@@ -117,115 +67,6 @@ function isBuilderPersona(p: PersonaListItem): boolean {
       p.entity_scope_ids,
       p.profile_ids,
     ].some((a) => a != null && a.length > 0)
-  );
-}
-
-/**
- * All persona-builder details for one card: taxonomy, demographics, and the
- * mapped construct/theme/role/timeframe/scope/profile ids. Renders nothing for
- * personas without builder output (e.g. data-file generated personas).
- */
-/** Collapsed height (px) for a persona's detail block before "Show more". */
-const DETAILS_COLLAPSED_MAX = 132;
-
-function PersonaDetails({ persona }: { persona: PersonaListItem }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const taxonomy = [
-    persona.industry ? (["Industry", humanizeToken(persona.industry)] as const) : null,
-    persona.category ? (["Category", humanizeToken(persona.category)] as const) : null,
-    persona.sub_category_id
-      ? (["Sub-category", humanizeToken(persona.sub_category_id)] as const)
-      : null,
-  ].filter(Boolean) as Array<readonly [string, string]>;
-
-  const demographics = demographicEntries(persona.demographics);
-
-  const chipGroups: Array<[string, string[] | null | undefined]> = [
-    ["Micro-categories", persona.micro_category],
-    ["Themes", persona.theme_ids],
-    ["Constructs", persona.construct_ids],
-    ["Roles", persona.role_type_ids],
-    ["Timeframes", persona.timeframe_ids],
-    ["Entity scope", persona.entity_scope_ids],
-    ["Profile fields", persona.profile_ids],
-  ];
-
-  const populatedChipGroups = chipGroups.filter(
-    ([, items]) => items && items.length > 0,
-  );
-  const isEmpty =
-    taxonomy.length === 0 &&
-    demographics.length === 0 &&
-    populatedChipGroups.length === 0;
-  if (isEmpty) return null;
-
-  // "Show more" appears only for detail-heavy personas; deterministic (no DOM
-  // measurement) so it stays stable across renders. Collapsed view is clamped
-  // to a fixed height via CSS.
-  const sectionCount =
-    (taxonomy.length > 0 ? 1 : 0) +
-    (demographics.length > 0 ? 1 : 0) +
-    populatedChipGroups.length;
-  const isLong = sectionCount > 3;
-  const collapsed = isLong && !expanded;
-
-  return (
-    <div className="flex flex-col gap-2 border-t pt-3">
-      <div
-        style={{ maxHeight: collapsed ? DETAILS_COLLAPSED_MAX : undefined }}
-        className={cn(
-          "flex flex-col gap-3 transition-[max-height] duration-200",
-          collapsed && "overflow-hidden",
-        )}
-      >
-      {taxonomy.length > 0 && (
-        <div className="flex flex-col gap-1">
-          {taxonomy.map(([label, value]) => (
-            <div key={label} className="flex items-baseline justify-between gap-3">
-              <span className="shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
-                {label}
-              </span>
-              <span className="truncate text-right text-xs font-medium text-foreground">
-                {value}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {demographics.length > 0 && (
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Demographics
-          </p>
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            {demographics.map(([label, value]) => (
-              <div key={label} className="flex flex-col">
-                <dt className="text-[11px] text-muted-foreground">{label}</dt>
-                <dd className="text-xs font-medium text-foreground">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-
-      {chipGroups.map(([label, items]) => (
-        <DetailChips key={label} label={label} items={items} />
-      ))}
-      </div>
-
-      {isLong && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="self-start text-xs font-semibold text-primary hover:underline"
-          aria-expanded={expanded}
-        >
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -285,6 +126,16 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
 
   const personas = personasQuery.data?.personas ?? [];
   const summary = dashboardQuery.data?.summary;
+
+  // run_query output (study breakdown + evidence) keyed by persona_id, merged
+  // onto each list card below.
+  const evidenceByPersona = useMemo(() => {
+    const map = new Map<string, DashboardPersona>();
+    for (const p of dashboardQuery.data?.personas ?? []) {
+      map.set(p.persona_id, p);
+    }
+    return map;
+  }, [dashboardQuery.data?.personas]);
 
   // Clear selection when the project changes.
   useEffect(() => {
@@ -510,7 +361,10 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                       </div>
                     )}
 
-                    <PersonaDetails persona={persona} />
+                    <PersonaEvidence
+                      data={evidenceByPersona.get(persona.persona_id)}
+                      className="border-t pt-3"
+                    />
 
                     <div className="mt-auto pt-1">
                       <Button

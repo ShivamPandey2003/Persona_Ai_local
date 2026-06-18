@@ -11,43 +11,28 @@ export type BuilderChatMessageT = {
   content: string;
 };
 
-/** A single built persona — one entry of final_result.personas. */
-export type BuilderPersona = {
-  persona_index: number | null;
-  industry: string | null;
-  category: string | null;
-  sub_category_id: string | null;
-  micro_category: string[] | null;
-  construct_ids: string[] | null;
-  role_type_ids: string[] | null;
-  timeframe_ids: string[] | null;
-  entity_scope_ids: string[] | null;
-  theme_ids: string[] | null;
-  profile_ids: string[] | null;
-  demographics: Record<string, string | null> | null;
-};
-
-/** Personas produced once requirements are complete; null until then. */
-export type BuilderFinalResult = { personas: BuilderPersona[] } | null;
-
 /**
  * Unified response of POST /v1/persona/chat/message, returned for both
  * flow="start" and flow="message":
- *   - id           : conversation_id (route / persist the session with it)
- *   - messages     : the assistant's reply for this turn ({ role, content })
- *   - final_result : built personas once the agent finishes, else null
+ *   - id              : conversation_id (route / persist the session with it)
+ *   - messages        : the assistant's reply for this turn ({ role, content })
+ *   - building_persona: 1 when finishing the build kicked off the run_query
+ *                       background job (else 0). When 1, `job_id` is present.
+ *   - job_id          : the persona_query job to poll (see usePersonaBuildJob)
+ *                       for the study/evidence results; absent unless building.
  */
 export type BuilderChatTurnResponse = {
   id: string;
   messages: BuilderChatMessageT[];
-  final_result: BuilderFinalResult;
+  building_persona: number;
+  job_id?: string | null;
 };
 
 /**
  * Start a builder conversation (flow="start").
  *
  * The old /chat/start endpoint was folded into /chat/message. The opening
- * assistant question arrives in `messages`; `final_result` is null on the
+ * assistant question arrives in `messages`; `building_persona` is 0 on the
  * opening turn.
  */
 export const useBuilderChatStart = () => {
