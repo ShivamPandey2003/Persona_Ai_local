@@ -15,11 +15,13 @@ import ErrorMessage from "./ErrorMessage";
 import ChatComposer from "./ChatComposer";
 import ChatHistorySkeleton from "./ChatHistorySkeleton";
 import ChatScrollButton from "./ChatScrollButton";
+import PersonaBuildProgress from "./PersonaBuildProgress";
 import { Button } from "@/components/ui/button";
 import { GradientRingLoader } from "@/components/ui/loader";
 
 import { useBuilderHistory, useChatList } from "@/api/Chat/query";
 import { useBuilderChatMessage } from "@/api/Chat/mutation";
+import type { RunQueryPersona } from "@/api/Persona/query";
 import ChatEnded from "@/components/common/Chat/ChatEnded";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
@@ -41,6 +43,11 @@ function ConversationPromptInput() {
   const [liveMessages, setLiveMessages] = useState<MessageT[]>([]);
   const [input, setInput] = useState("");
   const [endedLocal, setEndedLocal] = useState(false);
+  // persona_query job id while the "Building Your Personas…" loader runs.
+  const [queryJobId, setQueryJobId] = useState<string | null>(null);
+  // True only once the job finished AND produced real study/evidence data —
+  // drives the celebratory pulse on the "View Personas" button.
+  const [personasReady, setPersonasReady] = useState(false);
 
   const messageMut = useBuilderChatMessage(conversationId ?? "");
 
@@ -71,6 +78,9 @@ function ConversationPromptInput() {
   useEffect(() => {
     setLiveMessages([]);
     setEndedLocal(false);
+    setPersonasReady(false);
+    // Resume the build progress if the user left while a job was still running.
+    setQueryJobId(getSession(conversationId)?.queryJobId ?? null);
   }, [conversationId]);
 
   const stbRef = useRef<StickToBottomContext | null>(null);
@@ -86,7 +96,7 @@ function ConversationPromptInput() {
       const textarea = composerRef.current?.querySelector("textarea");
       if (textarea) {
         textarea.focus();
-        const end = text.length;
+        const end = textarea.value.length;
         textarea.setSelectionRange(end, end);
       }
     });
@@ -100,19 +110,53 @@ function ConversationPromptInput() {
     signal: history.messages.length,
   });
 
-  const openPersonaPanel = () => dispatch(setPersonaDialog(true));
+  const openPersonaPanel = useCallback(
+    () => dispatch(setPersonaDialog(true)),
+    [dispatch],
+  );
 
-  const finishConversation = () => {
+  const invalidatePersonas = useCallback(() => {
+    if (!projectId) return;
+    queryClient.invalidateQueries({ queryKey: ["PersonaList", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["PersonaDashboard", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
+  }, [projectId]);
+
+  /** Mark the builder conversation ended (no further messages accepted). */
+  const markEnded = useCallback(() => {
     setEndedLocal(true);
     if (conversationId) touchSession(conversationId, { ended: true });
     if (projectId) {
-      queryClient.invalidateQueries({ queryKey: ["PersonaList", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["PersonaDashboard", projectId] });
       queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
     }
-    toast.success("Your personas are ready!");
-    openPersonaPanel();
-  };
+  }, [conversationId, projectId]);
+
+  /** persona_query job finished: refresh personas and open the dashboard. The
+   * celebratory pulse only fires when run_query actually produced study/evidence
+   * data for at least one persona. */
+  const handleBuildComplete = useCallback(
+    (personas: RunQueryPersona[] = []) => {
+      if (conversationId) touchSession(conversationId, { queryJobId: null });
+      setQueryJobId(null);
+      const hasData = personas.some(
+        (p) =>
+          (p.study_summary?.length ?? 0) > 0 ||
+          (p.final_evidence_by_category?.length ?? 0) > 0,
+      );
+      setPersonasReady(hasData);
+      invalidatePersonas();
+      toast.success("Your personas are ready!");
+      openPersonaPanel();
+    },
+    [conversationId, invalidatePersonas, openPersonaPanel],
+  );
+
+  /** persona_query job failed: personas exist but without run_query evidence. */
+  const handleBuildError = useCallback(() => {
+    if (conversationId) touchSession(conversationId, { queryJobId: null });
+    invalidatePersonas();
+    toast.error("Personas were built, but analysing their data didn't finish.");
+  }, [conversationId, invalidatePersonas]);
 
   const handleSend = () => {
     const text = input.trim();
@@ -137,14 +181,22 @@ function ConversationPromptInput() {
               message: data.messages?.[0]?.content ?? "",
             },
           ]);
-           if (isFirstUserMessage) {
-            touchSession(conversationId, { title: snippet(text) });
-            if (projectId) {
-              queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
+          touchSession(conversationId, {
+            title: isFirstUserMessage ? snippet(text) : undefined,
+          });
+          // building_persona === 1 => requirements done, personas persisted, and
+          // the backend kicked off run_query as a background job. Show the loader
+          // and poll the job; open the dashboard on completion. When no job_id
+          // comes back, open the dashboard immediately.
+          if (data.building_persona === 1) {
+            markEnded();
+            if (data.job_id) {
+              touchSession(conversationId, { queryJobId: data.job_id });
+              setQueryJobId(data.job_id);
+            } else {
+              handleBuildComplete();
             }
           }
-          // final_result present => build complete: auto-end + show personas.
-          if (data.final_result) finishConversation();
         },
         onError: (err) => {
           if (/ended/i.test(err.message)) {
@@ -164,7 +216,11 @@ function ConversationPromptInput() {
           open automatically once the build completes. */}
       <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center justify-between gap-4 px-4 py-2">
         <span className="text-xs font-medium text-muted-foreground">
-          {ended ? "Personas ready" : "Persona Builder"}
+          {queryJobId
+            ? "Building personas…"
+            : ended
+              ? "Personas ready"
+              : "Persona Builder"}
         </span>
         <Button
           size="sm"
@@ -172,7 +228,7 @@ function ConversationPromptInput() {
           onClick={openPersonaPanel}
           className={cn(
             "shrink-0",
-            ended &&
+            personasReady &&
               "border-primary/40 text-primary animate-[success-pulse_1.4s_ease-out_infinite]",
           )}
         >
@@ -206,6 +262,17 @@ function ConversationPromptInput() {
           ))}
 
           {messageMut.isPending && <LoadingMessage />}
+
+          {/* Live build progress once requirements are complete. */}
+          {queryJobId && (
+            <PersonaBuildProgress
+              jobId={queryJobId}
+              onComplete={handleBuildComplete}
+              onError={handleBuildError}
+              onViewPersonas={openPersonaPanel}
+            />
+          )}
+
           {history.isError && (
             <ErrorMessage
               error={{

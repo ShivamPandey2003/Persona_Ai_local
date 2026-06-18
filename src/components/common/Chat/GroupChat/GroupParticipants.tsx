@@ -17,20 +17,15 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { personaColorStyle, personaInitials } from "@/lib/personaColors";
-import { usePersonaList } from "@/api/Persona/query";
+import {
+  usePersonaList,
+  usePersonaDashboard,
+  type DashboardPersona,
+} from "@/api/Persona/query";
+import PersonaEvidence from "@/components/common/Chat/PersonaEvidence";
 
 /** Avatars shown in the header stack before collapsing into a "+N" pill. */
 const MAX_AVATARS = 5;
-
-const DEMOGRAPHIC_LABELS: Array<[keyof PersonaDemographics, string]> = [
-  ["age_group", "Age"],
-  ["gender", "Gender"],
-  ["income", "Income"],
-  ["country", "Country"],
-  ["ethnicity", "Ethnicity"],
-  ["marital_status", "Marital status"],
-  ["primary_shopper_household", "Primary shopper"],
-];
 
 const confidenceColors: Record<string, string> = {
   High: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -43,16 +38,6 @@ function coverageColor(value: number): string {
   if (value >= 80) return "bg-emerald-500";
   if (value >= 70) return "bg-sky-500";
   return "bg-amber-500";
-}
-
-/** "brand.equity_positioning" -> "Equity Positioning". */
-function humanizeToken(raw: string): string {
-  const tail = raw.includes(".") ? raw.slice(raw.indexOf(".") + 1) : raw;
-  return tail
-    .split(/[_\s]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
 
 function PersonaAvatar({
@@ -76,92 +61,27 @@ function PersonaAvatar({
   );
 }
 
-/** A labelled row of chips (themes, constructs, …), hidden when empty. */
-function DetailChips({
-  label,
-  items,
-}: {
-  label: string;
-  items?: string[] | null;
-}) {
-  if (!items || items.length === 0) return null;
-  return (
-    <div>
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map((item) => (
-          <span
-            key={item}
-            className="rounded-md bg-secondary px-2 py-0.5 text-xs text-foreground"
-          >
-            {humanizeToken(item)}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function PersonaDetailView({
   participant,
   detail,
+  evidence,
   loading,
   onBack,
 }: {
   participant: GroupParticipant;
   detail: PersonaListItem | undefined;
+  evidence: DashboardPersona | undefined;
   loading: boolean;
   onBack?: () => void;
 }) {
-  const demographics = (
-    detail?.demographics
-      ? DEMOGRAPHIC_LABELS.map(
-          ([key, label]) =>
-            [label, detail.demographics?.[key]] as [
-              string,
-              string | null | undefined,
-            ],
-        )
-      : []
-  ).filter((e): e is [string, string] => e[1] != null && e[1] !== "");
-
-  const taxonomy = (
-    detail
-      ? [
-          detail.industry
-            ? (["Industry", humanizeToken(detail.industry)] as const)
-            : null,
-          detail.category
-            ? (["Category", humanizeToken(detail.category)] as const)
-            : null,
-          detail.sub_category_id
-            ? (["Sub-category", humanizeToken(detail.sub_category_id)] as const)
-            : null,
-        ]
-      : []
-  ).filter(Boolean) as Array<readonly [string, string]>;
-
-  const chipGroups: Array<[string, string[] | null | undefined]> = detail
-    ? [
-        ["Micro-categories", detail.micro_category],
-        ["Themes", detail.theme_ids],
-        ["Constructs", detail.construct_ids],
-        ["Roles", detail.role_type_ids],
-        ["Timeframes", detail.timeframe_ids],
-        ["Entity scope", detail.entity_scope_ids],
-        ["Profile fields", detail.profile_ids],
-      ]
-    : [];
+  const hasEvidence =
+    evidence != null &&
+    (evidence.study_summary.length > 0 ||
+      evidence.evidence_by_category.length > 0);
 
   const showCoverage =
     detail != null && typeof detail.coverage === "number" && detail.coverage > 0;
-  const hasAnyDetail =
-    showCoverage ||
-    demographics.length > 0 ||
-    taxonomy.length > 0 ||
-    chipGroups.some(([, items]) => items && items.length > 0);
+  const hasAnyDetail = showCoverage || hasEvidence;
 
   return (
     <>
@@ -226,45 +146,7 @@ function PersonaDetailView({
             </div>
           )}
 
-          {demographics.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Demographics
-              </p>
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
-                {demographics.map(([label, value]) => (
-                  <div key={label} className="flex flex-col">
-                    <dt className="text-[11px] text-muted-foreground">{label}</dt>
-                    <dd className="text-xs font-medium text-foreground">
-                      {value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )}
-
-          {taxonomy.length > 0 && (
-            <div className="flex flex-col gap-1">
-              {taxonomy.map(([label, value]) => (
-                <div
-                  key={label}
-                  className="flex items-baseline justify-between gap-3"
-                >
-                  <span className="shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {label}
-                  </span>
-                  <span className="truncate text-right text-xs font-medium text-foreground">
-                    {value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {chipGroups.map(([label, items]) => (
-            <DetailChips key={label} label={label} items={items} />
-          ))}
+          <PersonaEvidence data={evidence} />
 
           {loading && !detail && (
             <p className="text-xs text-muted-foreground">Loading details…</p>
@@ -343,6 +225,16 @@ function GroupParticipants({ participants, projectId }: GroupParticipantsProps) 
     return map;
   }, [personasQuery.data]);
 
+  // run_query output (study_summary + evidence) keyed by persona_id.
+  const dashboardQuery = usePersonaDashboard(projectId);
+  const evidenceById = useMemo(() => {
+    const map: Record<string, DashboardPersona> = {};
+    (dashboardQuery.data?.personas ?? []).forEach((p) => {
+      map[p.persona_id] = p;
+    });
+    return map;
+  }, [dashboardQuery.data]);
+
   if (participants.length === 0) return null;
 
   const visible = participants.slice(0, MAX_AVATARS);
@@ -405,6 +297,7 @@ function GroupParticipants({ participants, projectId }: GroupParticipantsProps) 
             <PersonaDetailView
               participant={selected}
               detail={detailById[selected.persona_id]}
+              evidence={evidenceById[selected.persona_id]}
               loading={personasQuery.isLoading}
               onBack={
                 participants.length > 1 ? () => setSelectedId(null) : undefined

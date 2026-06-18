@@ -1,4 +1,3 @@
-import { getAuthToken } from "@/lib/api";
 import { queryClient } from "@/provider";
 import { setProjectDelete } from "@/redux/GlobalModalSlice";
 import type { AppDispatch } from "@/redux/store";
@@ -20,7 +19,7 @@ type CreateProjectRes = {
   };
 };
 
-export const useCreateProject = (cb:()=>void) => {
+export const CreateProject = (cb:()=>void) => {
   const navigate = useNavigate();
   const createProject = useMutation<
     CreateProjectRes,
@@ -29,7 +28,9 @@ export const useCreateProject = (cb:()=>void) => {
   >({
     mutationKey: ["CreateProject"],
     mutationFn: async (payload) => {
-       const token = getAuthToken();
+      const userStr = localStorage.getItem("user");
+      const userData = userStr ? JSON.parse(atob(userStr)) : null;
+      const token = userData?.token || "";
 
       const requestPayload = {
         token,

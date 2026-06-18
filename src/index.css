@@ -555,6 +555,14 @@
   100% { left: 100%; width: 40%; }
 }
 
+/* Smooth indeterminate loader sweep — transform-only (no layout thrash), so it
+   stays buttery vs. animating left/width. The bar keeps a fixed width and just
+   slides across its track. */
+@keyframes loader-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
 /* Slowly drifting aurora/mesh gradient blobs. */
 @keyframes aurora-1 {
   0%, 100% { transform: translate(0, 0) scale(1); }
