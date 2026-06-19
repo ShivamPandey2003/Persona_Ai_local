@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import ProjectReducer from "@/redux/ProjectSlice";
 import GlobalModalReducer from "@/redux/GlobalModalSlice";
 
@@ -75,7 +76,7 @@ export function renderWithProviders(
       <QueryClientProvider client={queryClient}>
         <Provider store={store}>
           <MemoryRouter initialEntries={routerEntries ?? [route]}>
-            {children}
+            <TooltipProvider>{children}</TooltipProvider>
           </MemoryRouter>
         </Provider>
       </QueryClientProvider>
