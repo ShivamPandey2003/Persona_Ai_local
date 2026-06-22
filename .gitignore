@@ -12,6 +12,7 @@ lerna-debug.log*
 ConversationPromptInput.context.md
 k8-96.md
 
+coverage
 node_modules
 dist
 dist-ssr
