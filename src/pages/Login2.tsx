@@ -40,7 +40,7 @@ export default function PersonaAILoginPage() {
       <AuroraBackground />
       <div className="relative w-full max-w-7xl bg-white rounded-[36px] shadow-[0_20px_80px_rgba(99,56,246,0.08)] overflow-hidden border border-white/60 backdrop-blur-xl grid grid-cols-1 lg:grid-cols-2">
         {/* LEFT SECTION */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#5f6fff] to-[#7b89ff] p-10 md:p-8 flex flex-col justify-between">
+        <div className="relative hidden overflow-hidden bg-gradient-to-br from-[#5f6fff] to-[#7b89ff] p-10 md:p-8 lg:flex flex-col justify-between">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.35),transparent_40%)]" />
 
           {/* HEADER */}
@@ -133,7 +133,7 @@ export default function PersonaAILoginPage() {
         </div>
 
         {/* RIGHT SECTION */}
-        <div className="flex justify-center p-8 md:p-8 bg-[#FCFCFF]">
+        <div className="flex justify-center md:p-8 bg-[#FCFCFF]">
           <div className="w-full max-w-md">
             {/* LOGIN CARD */}
             <div className="rounded-[32px] bg-white border border-[#F1F1F1] shadow-[0_20px_60px_rgba(99,56,246,0.08)] p-8 md:p-10 duration-500 animate-in fade-in zoom-in-95">
