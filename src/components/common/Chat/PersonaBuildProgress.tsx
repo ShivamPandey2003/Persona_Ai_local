@@ -1,9 +1,13 @@
 import { useEffect, useRef } from "react";
-import { Loader2, Settings } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Settings, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { usePersonaBuildJob, type RunQueryPersona } from "@/api/Persona/query";
+import {
+  usePersonaBuildJob,
+  type PersonaBuildStep,
+  type RunQueryPersona,
+} from "@/api/Persona/query";
 
 type PersonaBuildProgressProps = {
   jobId: string;
@@ -19,7 +23,11 @@ type PersonaBuildProgressProps = {
  * Loader shown while the persona_query (run_query) background job runs. Polls
  * /projects/job-status (via {@link usePersonaBuildJob}) and calls onComplete /
  * onError exactly once when the job settles, so the parent can open the
- * dashboard. A plain loader for now — no step-by-step progress bar yet.
+ * dashboard.
+ *
+ * When the job reports `steps`, it renders a live per-step stepper (each step
+ * carries a "done / total personas" count); otherwise it falls back to a plain
+ * indeterminate loader.
  */
 function PersonaBuildProgress({
   jobId,
@@ -31,6 +39,9 @@ function PersonaBuildProgress({
 
   const status = data?.status ?? "running";
   const failed = status === "failed" || isError;
+  const steps = data?.steps ?? null;
+  const hasSteps = Array.isArray(steps) && steps.length > 0;
+  const progress = data?.progress ?? 0;
 
   // Fire onComplete / onError exactly once when the job settles.
   const settledRef = useRef(false);
@@ -66,14 +77,28 @@ function PersonaBuildProgress({
         )}
       </div>
 
-      {/* Indeterminate loader bar — smooth transform-based sweep, left -> right. */}
+      {/* Progress bar: determinate when steps report a percentage, else an
+          indeterminate transform-based sweep. Rose + full when failed. */}
       <div className="relative mt-4 h-1.5 overflow-hidden rounded-full bg-secondary">
         {failed ? (
           <div className="h-full w-full rounded-full bg-rose-500" />
+        ) : hasSteps ? (
+          <div
+            className="h-full rounded-full bg-foreground transition-all duration-500 ease-out"
+            style={{ width: `${Math.min(Math.max(progress, 4), 100)}%` }}
+          />
         ) : (
           <div className="absolute top-0 h-full w-2/5 rounded-full bg-foreground/70 animate-[loader-sweep_1.4s_ease-in-out_infinite]" />
         )}
       </div>
+
+      {hasSteps && (
+        <ul className="mt-4 space-y-2.5">
+          {steps!.map((step) => (
+            <StepRow key={step.key} step={step} jobFailed={failed} />
+          ))}
+        </ul>
+      )}
 
       {failed && onViewPersonas && (
         <div className="mt-4 flex justify-end">
@@ -83,6 +108,61 @@ function PersonaBuildProgress({
         </div>
       )}
     </div>
+  );
+}
+
+/** One row of the build stepper: status icon + label + "x / total" persona count. */
+function StepRow({
+  step,
+  jobFailed,
+}: {
+  step: PersonaBuildStep;
+  jobFailed: boolean;
+}) {
+  // If the whole job failed, steps still mid-flight read as failed rather than
+  // spinning forever.
+  const status =
+    jobFailed && step.status !== "done" ? "failed" : step.status;
+  const isDone = status === "done";
+  const isRunning = status === "running";
+  const isFailed = status === "failed";
+
+  return (
+    <li className="flex items-center gap-2.5 text-sm">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+        {isDone ? (
+          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+        ) : isFailed ? (
+          <XCircle className="h-5 w-5 text-rose-500" />
+        ) : isRunning ? (
+          <Loader2 className="h-4 w-4 animate-spin text-foreground" />
+        ) : (
+          <Circle className="h-4 w-4 text-muted-foreground/40" />
+        )}
+      </span>
+
+      <span
+        className={cn(
+          "flex-1 truncate",
+          isDone && "text-foreground",
+          isRunning && "font-medium text-foreground",
+          isFailed && "text-rose-600",
+          status === "pending" && "text-muted-foreground",
+        )}
+      >
+        {step.label}
+      </span>
+
+      {/* Per-step persona count, only meaningful with more than one persona. */}
+      {step.total > 1 && (
+        <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+          {Math.min(step.done, step.total)}/{step.total}
+          {step.failed > 0 && (
+            <span className="ml-1 text-rose-500">· {step.failed} failed</span>
+          )}
+        </span>
+      )}
+    </li>
   );
 }
 

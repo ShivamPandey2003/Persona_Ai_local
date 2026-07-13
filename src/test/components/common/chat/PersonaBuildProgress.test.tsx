@@ -25,6 +25,26 @@ describe("PersonaBuildProgress", () => {
     expect(await screen.findByText(/building your personas/i)).toBeInTheDocument();
   });
 
+  it("renders the per-step stepper with persona counts when steps are present", async () => {
+    jobStatus({
+      status: "running",
+      progress: 22,
+      steps: [
+        { key: "demographic_profiling", label: "Analyzing demographics", status: "done", done: 3, failed: 0, total: 3 },
+        { key: "respondent_matching", label: "Matching respondents", status: "running", done: 2, failed: 0, total: 3 },
+        { key: "evidence_labels", label: "Generating evidence highlights", status: "pending", done: 0, failed: 0, total: 3 },
+      ],
+    });
+    renderWithProviders(
+      <PersonaBuildProgress jobId="j1" onComplete={vi.fn()} />,
+    );
+    expect(await screen.findByText("Analyzing demographics")).toBeInTheDocument();
+    expect(screen.getByText("Matching respondents")).toBeInTheDocument();
+    expect(screen.getByText("Generating evidence highlights")).toBeInTheDocument();
+    // Per-step "done / total personas" badge for the in-flight step.
+    expect(screen.getByText("2/3")).toBeInTheDocument();
+  });
+
   it("calls onComplete once when the job is done", async () => {
     jobStatus({ status: "done", progress: 100, result: { personas: [] } });
     const onComplete = vi.fn();
