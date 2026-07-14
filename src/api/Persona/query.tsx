@@ -105,12 +105,31 @@ export type PersonaQueryJobResult = {
   error?: string;
 };
 
+/** Aggregate status of one build step, rolled up across all personas in the job. */
+export type PersonaBuildStepStatus = "pending" | "running" | "done" | "failed";
+
+/**
+ * One step of the persona_query build stepper. Counts are across all personas in
+ * the job, so `done`/`total` drives the "2 of 3 personas" badge. A step reads
+ * `done` only once every persona has cleared it.
+ */
+export type PersonaBuildStep = {
+  key: string;
+  label: string;
+  status: PersonaBuildStepStatus;
+  done: number;
+  failed: number;
+  total: number;
+};
+
 /** Inner payload of POST /v1/projects/job-status for a persona_query job. */
 export type PersonaBuildJob = {
   job_id: string;
   status: "queued" | "running" | "done" | "failed";
   progress: number;
   result: PersonaQueryJobResult | null;
+  /** Per-step stepper; null for jobs that don't report steps. */
+  steps: PersonaBuildStep[] | null;
 };
 
 /** Polling cadence (ms) while a build job is in flight. */
