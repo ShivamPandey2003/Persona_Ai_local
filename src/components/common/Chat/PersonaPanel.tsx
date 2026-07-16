@@ -94,7 +94,12 @@ function SummaryCard({
   return (
     <Card className="h-fit transition-shadow duration-200 hover:shadow-md">
       <CardContent className="flex items-center gap-3">
-        <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", iconBg)}>
+        <div
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-lg",
+            iconBg,
+          )}
+        >
           {icon}
         </div>
         <div>
@@ -174,7 +179,11 @@ type PersonaPanelProps = {
  * multiple persona chats both run through the group-chat endpoints. Used inline
  * as a project's persona dashboard and inside PersonaPanelDialog.
  */
-function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: PersonaPanelProps) {
+function PersonaPanel({
+  projectId,
+  onStarted,
+  scrollHeight = "h-[420px]",
+}: PersonaPanelProps) {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
   // Expand is per grid ROW, not per card: collapsed rows share a fixed card
@@ -184,7 +193,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [columns, setColumns] = useState(3);
   // Dashboard layout: rich "grid" cards or a compact "list" for scanning many.
-  const [view, setView] = useState<"grid" | "list">("grid");
+  const [view, setView] = useState<"grid" | "list">("list");
   // List view: which rows have their evidence panel expanded (by persona id).
   const [openEvidence, setOpenEvidence] = useState<Record<string, boolean>>({});
   const toggleEvidence = (id: string) =>
@@ -249,7 +258,9 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
     if (allSelected) {
       setSelected({});
     } else {
-      setSelected(Object.fromEntries(personas.map((p) => [p.persona_id, true])));
+      setSelected(
+        Object.fromEntries(personas.map((p) => [p.persona_id, true])),
+      );
     }
   };
 
@@ -319,21 +330,6 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
         <div className="inline-flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5">
           <button
             type="button"
-            onClick={() => setView("grid")}
-            aria-pressed={view === "grid"}
-            aria-label="Grid view"
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              view === "grid"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-            Grid
-          </button>
-          <button
-            type="button"
             onClick={() => setView("list")}
             aria-pressed={view === "list"}
             aria-label="List view"
@@ -347,6 +343,21 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
             <List className="h-3.5 w-3.5" />
             List
           </button>
+          <button
+            type="button"
+            onClick={() => setView("grid")}
+            aria-pressed={view === "grid"}
+            aria-label="Grid view"
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              view === "grid"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            Grid
+          </button>
         </div>
       </div>
 
@@ -359,23 +370,26 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
               ))}
             </div>
           ) : (
-          <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={`persona-skeleton-${i}`} className="flex h-[620px] flex-col">
-                <CardContent className="flex flex-1 flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <Skeleton className="h-4 w-2/3" />
-                      <Skeleton className="h-3 w-1/3" />
+            <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card
+                  key={`persona-skeleton-${i}`}
+                  className="flex h-[620px] flex-col"
+                >
+                  <CardContent className="flex flex-1 flex-col gap-4">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Skeleton className="h-4 w-2/3" />
+                        <Skeleton className="h-3 w-1/3" />
+                      </div>
                     </div>
-                  </div>
-                  <Skeleton className="h-2 w-full rounded-full" />
-                  <Skeleton className="mt-auto h-9 w-full rounded-md" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    <Skeleton className="h-2 w-full rounded-full" />
+                    <Skeleton className="mt-auto h-9 w-full rounded-md" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )
         ) : personas.length === 0 ? (
           <EmptyState
@@ -394,8 +408,8 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
               const hasCoverage = typeof coverage === "number" && coverage > 0;
               const dashHasEvidence = Boolean(
                 dash &&
-                  (dash.study_summary.length > 0 ||
-                    dash.evidence_by_category.length > 0),
+                (dash.study_summary.length > 0 ||
+                  dash.evidence_by_category.length > 0),
               );
               const isEvidenceOpen = Boolean(openEvidence[persona.persona_id]);
               return (
@@ -407,162 +421,169 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                   )}
                 >
                   <div className="flex items-center gap-3 p-3">
-                  <Checkbox
-                    className="border border-gray-200 shadow"
-                    checked={isSelected}
-                    onCheckedChange={() => toggle(persona.persona_id)}
-                    aria-label={`Select ${persona.persona_name ?? "persona"}`}
-                  />
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                    {personaInitials(persona.persona_name)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    {editingId === persona.persona_id ? (
-                      <input
-                        autoFocus
-                        value={draft}
-                        maxLength={150}
-                        disabled={updatePersona.isPending}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            e.currentTarget.blur();
-                          } else if (e.key === "Escape") {
-                            e.preventDefault();
-                            cancelRenameRef.current = true;
-                            e.currentTarget.blur();
-                          }
-                        }}
-                        onBlur={() => {
-                          if (cancelRenameRef.current) {
-                            cancelRenameRef.current = false;
-                            setEditingId(null);
-                            return;
-                          }
-                          submitRename(persona.persona_id, persona.persona_name);
-                        }}
-                        className="w-full rounded-md border border-input bg-background px-1.5 py-0.5 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                      />
-                    ) : (
-                      <div className="group/name flex items-center gap-1">
-                        <p
-                          className="truncate text-sm font-semibold text-foreground"
-                          title={persona.persona_name ?? "Untitled persona"}
-                        >
-                          {persona.persona_name ?? "Untitled persona"}
-                        </p>
-                        <button
-                          type="button"
-                          aria-label="Rename persona"
-                          onClick={() =>
-                            startRename(persona.persona_id, persona.persona_name)
-                          }
-                          className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/name:opacity-100"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      </div>
-                    )}
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                      <span className="capitalize">{persona.status}</span>
-                      {dash && dash.unique_studies > 0 && (
-                        <>
-                          <span aria-hidden>·</span>
-                          <span>
-                            {dash.unique_studies}{" "}
-                            {dash.unique_studies === 1 ? "study" : "studies"}
-                          </span>
-                        </>
-                      )}
-                      {dash && dash.unique_respondents > 0 && (
-                        <>
-                          <span aria-hidden>·</span>
-                          <span>
-                            {dash.unique_respondents.toLocaleString()} respondents
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  {hasCoverage && (
-                    <div className="hidden w-36 shrink-0 sm:block">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Coverage
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="What does coverage mean?"
-                                className="text-muted-foreground/70 transition-colors hover:text-foreground"
-                              >
-                                <Info className="h-3 w-3" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs text-left leading-relaxed">
-                              {COVERAGE_HOVER_TEXT}
-                            </TooltipContent>
-                          </Tooltip>
-                        </span>
-                        <span className="text-xs font-semibold tabular-nums text-foreground">
-                          {Math.round(coverage as number)}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-secondary">
-                        <div
-                          className={cn(
-                            "h-1.5 rounded-full transition-all",
-                            coverageColor(coverage as number),
-                          )}
-                          style={{ width: `${coverage}%` }}
+                    <Checkbox
+                      className="border border-gray-200 shadow"
+                      checked={isSelected}
+                      onCheckedChange={() => toggle(persona.persona_id)}
+                      aria-label={`Select ${persona.persona_name ?? "persona"}`}
+                    />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                      {personaInitials(persona.persona_name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {editingId === persona.persona_id ? (
+                        <input
+                          autoFocus
+                          value={draft}
+                          maxLength={150}
+                          disabled={updatePersona.isPending}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                            } else if (e.key === "Escape") {
+                              e.preventDefault();
+                              cancelRenameRef.current = true;
+                              e.currentTarget.blur();
+                            }
+                          }}
+                          onBlur={() => {
+                            if (cancelRenameRef.current) {
+                              cancelRenameRef.current = false;
+                              setEditingId(null);
+                              return;
+                            }
+                            submitRename(
+                              persona.persona_id,
+                              persona.persona_name,
+                            );
+                          }}
+                          className="w-full rounded-md border border-input bg-background px-1.5 py-0.5 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                         />
-                      </div>
-                    </div>
-                  )}
-                  {!dash && dashboardQuery.isLoading && (
-                    <div className="hidden w-36 shrink-0 sm:block">
-                      <Skeleton className="mb-1 h-2.5 w-16" />
-                      <Skeleton className="h-1.5 w-full rounded-full" />
-                    </div>
-                  )}
-                  {dashHasEvidence && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 gap-1 text-muted-foreground hover:text-foreground"
-                      onClick={() => toggleEvidence(persona.persona_id)}
-                      aria-expanded={isEvidenceOpen}
-                    >
-                      Evidence
-                      <ChevronDown
-                        className={cn(
-                          "h-3.5 w-3.5 transition-transform",
-                          isEvidenceOpen && "rotate-180",
+                      ) : (
+                        <div className="group/name flex items-center gap-1">
+                          <p
+                            className="truncate text-sm font-semibold text-foreground"
+                            title={persona.persona_name ?? "Untitled persona"}
+                          >
+                            {persona.persona_name ?? "Untitled persona"}
+                          </p>
+                          <button
+                            type="button"
+                            aria-label="Rename persona"
+                            onClick={() =>
+                              startRename(
+                                persona.persona_id,
+                                persona.persona_name,
+                              )
+                            }
+                            className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/name:opacity-100"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        <span className="capitalize">{persona.status}</span>
+                        {dash && dash.unique_studies > 0 && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>
+                              {dash.unique_studies}{" "}
+                              {dash.unique_studies === 1 ? "study" : "studies"}
+                            </span>
+                          </>
                         )}
-                      />
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    disabled={startGroup.isPending}
-                    onClick={() =>
-                      startChat(
-                        [persona.persona_id],
-                        persona.persona_name ?? "Persona",
-                        persona.persona_id,
-                      )
-                    }
-                  >
-                    {isPending ? (
-                      <CircularLoader size="sm" />
-                    ) : (
-                      <MessageSquare className="mr-2 h-4 w-4" />
+                        {dash && dash.unique_respondents > 0 && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>
+                              {dash.unique_respondents.toLocaleString()}{" "}
+                              respondents
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    {hasCoverage && (
+                      <div className="hidden w-36 shrink-0 sm:block">
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Coverage
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label="What does coverage mean?"
+                                  className="text-muted-foreground/70 transition-colors hover:text-foreground"
+                                >
+                                  <Info className="h-3 w-3" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-left leading-relaxed">
+                                {COVERAGE_HOVER_TEXT}
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                          <span className="text-xs font-semibold tabular-nums text-foreground">
+                            {Math.round(coverage as number)}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-secondary">
+                          <div
+                            className={cn(
+                              "h-1.5 rounded-full transition-all",
+                              coverageColor(coverage as number),
+                            )}
+                            style={{ width: `${coverage}%` }}
+                          />
+                        </div>
+                      </div>
                     )}
-                    Chat
-                  </Button>
+                    {!dash && dashboardQuery.isLoading && (
+                      <div className="hidden w-36 shrink-0 sm:block">
+                        <Skeleton className="mb-1 h-2.5 w-16" />
+                        <Skeleton className="h-1.5 w-full rounded-full" />
+                      </div>
+                    )}
+                    {dashHasEvidence && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 gap-1 text-muted-foreground hover:text-foreground"
+                        onClick={() => toggleEvidence(persona.persona_id)}
+                        aria-expanded={isEvidenceOpen}
+                      >
+                        Evidence
+                        <ChevronDown
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform",
+                            isEvidenceOpen && "rotate-180",
+                          )}
+                        />
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={startGroup.isPending}
+                      onClick={() =>
+                        startChat(
+                          [persona.persona_id],
+                          persona.persona_name ?? "Persona",
+                          persona.persona_id,
+                        )
+                      }
+                    >
+                      {isPending ? (
+                        <CircularLoader size="sm" />
+                      ) : (
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                      )}
+                      Chat
+                    </Button>
                   </div>
                   {isEvidenceOpen && dashHasEvidence && (
                     <div className="border-t p-3 duration-200 animate-in fade-in slide-in-from-top-1">
@@ -665,7 +686,7 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                         </div>
                       </div>
                       <Checkbox
-                      className="border border-gray-200 shadow"
+                        className="border border-gray-200 shadow"
                         checked={isSelected}
                         onCheckedChange={() => toggle(persona.persona_id)}
                         aria-label={`Select ${persona.persona_name ?? "persona"}`}
@@ -673,35 +694,39 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                     </div>
 
                     {!isBuilderPersona(persona) &&
-                      evidenceByPersona.get(persona.persona_id)?.final_coverage == null && (
-                      <div>
-                        <div className="mb-1.5 flex items-center justify-between">
-                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Coverage
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={cn("shrink-0", confidenceColors[persona.confidence])}
-                          >
-                            {persona.confidence}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 flex-1 rounded-full bg-secondary">
-                            <div
+                      evidenceByPersona.get(persona.persona_id)
+                        ?.final_coverage == null && (
+                        <div>
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Coverage
+                            </span>
+                            <Badge
+                              variant="outline"
                               className={cn(
-                                "h-2 rounded-full transition-all animate-[coverage-grow_0.8s_ease-out]",
-                                coverageColor(persona.coverage),
+                                "shrink-0",
+                                confidenceColors[persona.confidence],
                               )}
-                              style={{ width: `${persona.coverage}%` }}
-                            />
+                            >
+                              {persona.confidence}
+                            </Badge>
                           </div>
-                          <span className="text-xs font-semibold tabular-nums text-foreground">
-                            {persona.coverage}%
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 flex-1 rounded-full bg-secondary">
+                              <div
+                                className={cn(
+                                  "h-2 rounded-full transition-all animate-[coverage-grow_0.8s_ease-out]",
+                                  coverageColor(persona.coverage),
+                                )}
+                                style={{ width: `${persona.coverage}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums text-foreground">
+                              {persona.coverage}%
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     {dash ? (
                       <PersonaEvidence
@@ -709,7 +734,10 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
                         className="border-t pt-3"
                         expanded={isExpanded}
                         onExpandedChange={(next) =>
-                          setExpandedRows((prev) => ({ ...prev, [rowIndex]: next }))
+                          setExpandedRows((prev) => ({
+                            ...prev,
+                            [rowIndex]: next,
+                          }))
                         }
                       />
                     ) : dashboardQuery.isLoading ? (
@@ -769,7 +797,9 @@ function PersonaPanel({ projectId, onStarted, scrollHeight = "h-[420px]" }: Pers
           onClick={() =>
             startChat(
               selectedPersonas.map((p) => p.persona_id),
-              groupTitle(selectedPersonas.map((p) => p.persona_name ?? "Persona")),
+              groupTitle(
+                selectedPersonas.map((p) => p.persona_name ?? "Persona"),
+              ),
               "group",
             )
           }
