@@ -79,8 +79,13 @@ function PersonaDetailView({
     (evidence.study_summary.length > 0 ||
       evidence.evidence_by_category.length > 0);
 
+  // run_query personas surface coverage inside PersonaEvidence (final_coverage);
+  // fall back to this standalone bar only for legacy personas without it.
   const showCoverage =
-    detail != null && typeof detail.coverage === "number" && detail.coverage > 0;
+    evidence?.final_coverage == null &&
+    detail != null &&
+    typeof detail.coverage === "number" &&
+    detail.coverage > 0;
   const hasAnyDetail = showCoverage || hasEvidence;
 
   return (
@@ -146,7 +151,7 @@ function PersonaDetailView({
             </div>
           )}
 
-          <PersonaEvidence data={evidence} />
+          <PersonaEvidence data={evidence} defaultExpanded />
 
           {loading && !detail && (
             <p className="text-xs text-muted-foreground">Loading details…</p>

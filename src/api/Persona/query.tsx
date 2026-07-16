@@ -50,6 +50,8 @@ export type DashboardPersona = {
   persona_id: string;
   persona_name: string | null;
   status: string;
+  /** run_query coverage as a percentage (0-100); null until the pipeline emits it. */
+  final_coverage: number | null;
   matched_respondents: number;
   unique_studies: number;
   unique_respondents: number;

@@ -92,6 +92,10 @@ declare type GroupMessageT = {
     message: string;
     persona_name?: string;
     evidence_tags?: string[];
+    /** Per-answer confidence for a persona reply: level ("strong"/"medium"/"weak")
+     * and a 0-100 score. Rendered as a badge; absent on user + fallback messages. */
+    confidence_level?: string | null;
+    confidence_score?: number | null;
     /** True while an optimistic message is awaiting its server reply. */
     pending?: boolean;
 }

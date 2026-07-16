@@ -56,21 +56,39 @@ describe("PersonaEvidence", () => {
     expect(screen.getByText("72%")).toBeInTheDocument();
   });
 
-  it("collapses long category lists behind a Show more toggle", async () => {
+  it("renders all evidence categories (scrollable, not sliced)", () => {
+    const categories: Category[] = [1, 2, 3].map((i) => ({
+      theme_id: `t${i}`,
+      theme_name: `Theme ${i}`,
+      items: [{ label: `Item ${i}`, support_pct: 50, n: 5 }],
+    }));
+    render(<PersonaEvidence data={makeData({ evidence_by_category: categories })} />);
+
+    // No slicing: every category is mounted; overflow is scrolled, not hidden.
+    expect(screen.getByText("Theme 1")).toBeInTheDocument();
+    expect(screen.getByText("Theme 2")).toBeInTheDocument();
+    expect(screen.getByText("Theme 3")).toBeInTheDocument();
+  });
+
+  it("expanded by default exposes a Collapse toggle without dropping content", async () => {
     const categories: Category[] = [1, 2, 3].map((i) => ({
       theme_id: `t${i}`,
       theme_name: `Theme ${i}`,
       items: [{ label: `Item ${i}`, support_pct: 50, n: 5 }],
     }));
     const user = userEvent.setup();
-    render(<PersonaEvidence data={makeData({ evidence_by_category: categories })} />);
+    render(
+      <PersonaEvidence
+        data={makeData({ evidence_by_category: categories })}
+        defaultExpanded
+      />,
+    );
 
-    // Only the first 2 of 3 categories show initially.
-    expect(screen.getByText("Theme 1")).toBeInTheDocument();
-    expect(screen.queryByText("Theme 3")).not.toBeInTheDocument();
+    const collapse = screen.getByRole("button", { name: /collapse/i });
+    expect(collapse).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /show 1 more/i }));
+    // Collapsing keeps every category mounted (they're scrolled, not removed).
+    await user.click(collapse);
     expect(screen.getByText("Theme 3")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show less/i })).toBeInTheDocument();
   });
 });
