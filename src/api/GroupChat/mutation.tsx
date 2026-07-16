@@ -69,6 +69,8 @@ export type PersonaBroadcastReply = {
   persona_name: string;
   response: string;
   evidence_tags: string[];
+  confidence_level?: string | null;
+  confidence_score?: number | null;
 };
 
 type BroadcastResponse = {
@@ -98,6 +100,8 @@ type SingleResponse = {
   response: {
     persona_name: string;
     message: string;
+    confidence_level?: string | null;
+    confidence_score?: number | null;
   };
 };
 

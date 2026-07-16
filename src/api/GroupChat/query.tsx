@@ -14,6 +14,8 @@ type RawPersonaReply = {
   persona_name: string;
   response: string;
   evidence_tags?: string[];
+  confidence_level?: string | null;
+  confidence_score?: number | null;
 };
 
 type RawGroupTurn = {
@@ -76,6 +78,8 @@ export const useGroupHistory = (groupId: string | undefined) => {
           message: r.response,
           persona_name: r.persona_name,
           evidence_tags: r.evidence_tags,
+          confidence_level: r.confidence_level,
+          confidence_score: r.confidence_score,
         });
       });
     }

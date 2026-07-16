@@ -149,6 +149,8 @@ function GroupChatView() {
       persona_name: string;
       response: string;
       evidence_tags?: string[];
+      confidence_level?: string | null;
+      confidence_score?: number | null;
     }>,
   ) => {
     if (responses.length === 0) return;
@@ -163,6 +165,8 @@ function GroupChatView() {
           persona_name: r.persona_name,
           message: r.response,
           evidence_tags: r.evidence_tags,
+          confidence_level: r.confidence_level,
+          confidence_score: r.confidence_score,
         },
       ]);
       i += 1;
@@ -210,6 +214,8 @@ function GroupChatView() {
                 role: "persona",
                 persona_name: data.response.persona_name,
                 message: data.response.message,
+                confidence_level: data.response.confidence_level,
+                confidence_score: data.response.confidence_score,
               },
             ]);
             touchSession(groupId);

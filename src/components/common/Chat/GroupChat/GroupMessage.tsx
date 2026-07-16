@@ -13,6 +13,13 @@ import { cn } from "@/lib/utils";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { personaColorStyle, personaInitials } from "@/lib/personaColors";
 
+/** Pill colours for a persona reply's confidence level (strong/medium/weak). */
+const CONFIDENCE_BADGE: Record<string, string> = {
+  strong: "bg-emerald-100 text-emerald-800 ring-emerald-200",
+  medium: "bg-amber-100 text-amber-800 ring-amber-200",
+  weak: "bg-rose-100 text-rose-800 ring-rose-200",
+};
+
 type GroupMessageProps = {
   message: GroupMessageT;
   /** Backend colour word for the speaking persona (from participants). */
@@ -93,9 +100,26 @@ const GroupMessage = memo(({ message, color, onEdit, animate }: GroupMessageProp
         {personaInitials(message.persona_name ?? "?")}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className={cn("text-xs font-semibold", style.text)}>
-          {message.persona_name}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cn("text-xs font-semibold", style.text)}>
+            {message.persona_name}
+          </span>
+          {message.confidence_level && (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1",
+                CONFIDENCE_BADGE[message.confidence_level.toLowerCase()] ??
+                  "bg-secondary text-muted-foreground ring-border",
+              )}
+              title="Response confidence"
+            >
+              {message.confidence_level}
+              {typeof message.confidence_score === "number"
+                ? ` · ${message.confidence_score}%`
+                : ""}
+            </span>
+          )}
+        </div>
         <MessageContent
           markdown
           className="text-foreground prose w-full min-w-0 rounded-lg bg-transparent p-0"
