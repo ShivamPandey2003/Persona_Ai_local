@@ -77,20 +77,85 @@ type BroadcastResponse = {
   responses: PersonaBroadcastReply[];
 };
 
-/** POST /v1/persona/group-chat/message (flow="message") — every persona replies. */
+/**
+ * POST /v1/persona/group-chat/message (flow="message") — every persona replies.
+ *
+ * `fileIds` are the ids of images already presigned + uploaded for this turn
+ * (see {@link uploadGroupImages}); they are attached to the persisted turn.
+ */
 export const useGroupBroadcast = (groupId: string) => {
   const token = getAuthToken();
-  return useMutation<BroadcastResponse, Error, { message: string }>({
+  return useMutation<
+    BroadcastResponse,
+    Error,
+    { message: string; fileIds?: string[] }
+  >({
     mutationKey: ["GroupBroadcast", groupId],
-    mutationFn: ({ message }) =>
+    mutationFn: ({ message, fileIds }) =>
       postApi<BroadcastResponse>("persona/group-chat/message", {
         token,
         flow: "message",
         group_id: groupId,
         message,
+        ...(fileIds && fileIds.length > 0 ? { file_ids: fileIds } : {}),
       }),
   });
 };
+
+/* ------------------------------------------------------------------ */
+/* Image attachments (server-side / proxy upload)                     */
+/* ------------------------------------------------------------------ */
+
+type UploadedImage = {
+  file_id: string;
+  file_name: string;
+  s3_key: string;
+};
+
+type ImageUploadResponse = {
+  images: UploadedImage[];
+  errors: { file_name: string; reason: string }[];
+};
+
+/**
+ * Upload group-chat images through the backend (proxy upload) and return the
+ * `file_id`s to attach to the message.
+ *
+ * The browser posts the raw bytes as multipart/form-data to
+ * /group-chat/image/upload; the server stores them in S3 itself, so no
+ * browser→S3 request (and therefore no bucket CORS) is required. Throws a
+ * user-facing error if the server rejects any file, so the caller can surface
+ * one error and roll back the optimistic message.
+ */
+export async function uploadGroupImages(
+  groupId: string,
+  files: File[],
+): Promise<string[]> {
+  if (files.length === 0) return [];
+
+  const token = getAuthToken();
+  const form = new FormData();
+  form.append("token", token);
+  form.append("group_id", groupId);
+  files.forEach((f) => form.append("files", f, f.name));
+
+  const data = await postApi<ImageUploadResponse>(
+    "persona/group-chat/image/upload",
+    form as unknown as Record<string, unknown>,
+  );
+
+  const uploaded = data.images ?? [];
+  const rejected = data.errors ?? [];
+
+  if (rejected.length > 0) {
+    throw new Error(rejected[0]?.reason || "Some images could not be uploaded");
+  }
+  if (uploaded.length !== files.length) {
+    throw new Error("Could not upload all images, please retry");
+  }
+
+  return uploaded.map((u) => u.file_id);
+}
 
 /* ------------------------------------------------------------------ */
 /* Message a single persona within the group                          */
@@ -111,15 +176,16 @@ export const useGroupMessageSingle = (groupId: string) => {
   return useMutation<
     SingleResponse,
     Error,
-    { personaId: string; message: string }
+    { personaId: string; message: string; fileIds?: string[] }
   >({
     mutationKey: ["GroupMessageSingle", groupId],
-    mutationFn: ({ personaId, message }) =>
+    mutationFn: ({ personaId, message, fileIds }) =>
       postApi<SingleResponse>("persona/group-chat/message-single", {
         token,
         group_id: groupId,
         persona_id: personaId,
         message,
+        ...(fileIds && fileIds.length > 0 ? { file_ids: fileIds } : {}),
       }),
   });
 };

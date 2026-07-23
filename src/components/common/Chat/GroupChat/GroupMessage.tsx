@@ -25,6 +25,25 @@ const CONFIDENCE_BADGE: Record<string, string> = {
   weak: "bg-rose-100 text-rose-800 ring-rose-200",
 };
 
+/** Pick a badge colour from the free-text confidence label (e.g. "High Confidence"). */
+function confidenceBadgeClass(label: string): string {
+  const key = label.toLowerCase();
+  if (key.includes("high") || key.includes("strong")) return CONFIDENCE_BADGE.strong;
+  if (key.includes("medium") || key.includes("moderate")) return CONFIDENCE_BADGE.medium;
+  if (key.includes("low") || key.includes("weak")) return CONFIDENCE_BADGE.weak;
+  return "bg-secondary text-muted-foreground ring-border";
+}
+
+/**
+ * The confidence value is "<label>; <explanation>" — the label shows on the
+ * badge, the explanation shows on hover. Missing "; " means no explanation.
+ */
+function parseConfidence(value: string): { label: string; detail: string } {
+  const sep = value.indexOf(";");
+  if (sep === -1) return { label: value.trim(), detail: "" };
+  return { label: value.slice(0, sep).trim(), detail: value.slice(sep + 1).trim() };
+}
+
 type GroupMessageProps = {
   message: GroupMessageT;
   /** Backend colour word for the speaking persona (from participants). */
@@ -44,11 +63,7 @@ const GroupMessage = memo(
     const isUser = message.role === "user";
     const [copied, setCopied] = useState(false);
     const shown = useTypewriter(message.message, Boolean(animate) && !isUser);
-    const Labels = {
-      strong: "Based on closely matching information.",
-      medium: "Based on partially matching information.",
-      weak: "Based on limited matching information.",
-    };
+    const confidence = parseConfidence(message.confidence_level ?? "");
 
     const handleCopy = async () => {
       try {
@@ -76,6 +91,26 @@ const GroupMessage = memo(
     if (isUser) {
       return (
         <Message className="group mx-auto flex w-full max-w-3xl flex-col items-end gap-1 px-2 duration-300 animate-in fade-in slide-in-from-right-2 md:px-10">
+          {message.images && message.images.length > 0 && (
+            <div className="flex max-w-[85%] flex-wrap justify-end gap-2 sm:max-w-[75%]">
+              {message.images.map((img, i) => (
+                <a
+                  key={`${img.url}-${i}`}
+                  href={img.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block overflow-hidden rounded-xl border border-border"
+                >
+                  <img
+                    src={img.url}
+                    alt={img.name}
+                    className="h-28 w-28 object-cover"
+                    loading="lazy"
+                  />
+                </a>
+              ))}
+            </div>
+          )}
           <MessageContent className="bg-muted text-primary max-w-[85%] rounded-3xl px-5 py-2.5 whitespace-pre-wrap sm:max-w-[75%]">
             {message.message}
           </MessageContent>
@@ -137,29 +172,29 @@ const GroupMessage = memo(
               ))}
             </div>
           )}
-          {message.confidence_level && (
+          {confidence.label && (
             <div className="flex items-center gap-2 mt-1.5">
               <span className="text-[12px] uppercase tracking-wide font-semibold">Confidence Level:</span>
               <span
                 className={cn(
                   "inline-flex w-fit items-center rounded-full px-1.5 py-0.5 text-[10px] gap-2 font-semibold uppercase tracking-wide ring-1",
-                  CONFIDENCE_BADGE[message.confidence_level.toLowerCase()] ??
-                    "bg-secondary text-muted-foreground ring-border",
+                  confidenceBadgeClass(confidence.label),
                 )}
-                // title="Response confidence"
               >
-                {message.confidence_level}
+                {confidence.label.split(" ")[0]}
                 {typeof message.confidence_score === "number"
                   ? ` · ${message.confidence_score}%`
                   : ""}
-                <Tooltip>
-                  <TooltipTrigger className="flex justify-start">
-                    <Info className="h-3 w-3" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {Labels[message.confidence_level as keyof typeof Labels]}
-                  </TooltipContent>
-                </Tooltip>
+                {confidence.detail && (
+                  <Tooltip>
+                    <TooltipTrigger className="flex justify-start">
+                      <Info className="h-3 w-3" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {confidence.detail}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               </span>
             </div>
           )}

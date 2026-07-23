@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import { SlidersHorizontal, Users } from "lucide-react";
+import { ImagePlus, SlidersHorizontal, Users, X } from "lucide-react";
 import type { StickToBottomContext } from "use-stick-to-bottom";
 
 import {
@@ -38,9 +38,15 @@ import {
   useGroupBroadcast,
   useGroupMessageSingle,
   useGroupContext,
+  uploadGroupImages,
 } from "@/api/GroupChat/mutation";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
+import {
+  useImageAttachments,
+  IMAGE_ACCEPT,
+  MAX_IMAGES,
+} from "@/hooks/useImageAttachments";
 import { touchSession } from "@/lib/chatStore";
 
 const ALL = "all";
@@ -62,13 +68,19 @@ function GroupChatView() {
   const [isRevealing, setIsRevealing] = useState(false);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Image attachments (broadcast-only) staged in the composer.
+  const attachments = useImageAttachments();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
   const participantsQuery = useGroupChatParticipants(groupId);
   const broadcastMut = useGroupBroadcast(groupId ?? "");
   const singleMut = useGroupMessageSingle(groupId ?? "");
   const contextMut = useGroupContext(groupId ?? "");
 
   const participants = participantsQuery.data ?? [];
-  const sending = broadcastMut.isPending || singleMut.isPending || isRevealing;
+  const sending =
+    broadcastMut.isPending || singleMut.isPending || isRevealing || uploading;
 
   const messages = useMemo(
     () => [...history.messages, ...liveMessages],
@@ -94,8 +106,13 @@ function GroupChatView() {
     setEnded(false);
     setAssumptions([]);
     setIsRevealing(false);
+    setUploading(false);
+    attachments.clear();
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    // attachments.clear is stable; intentionally keyed on groupId only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
+
 
   // Clear any pending reveal timer on unmount.
   useEffect(
@@ -137,6 +154,20 @@ function GroupChatView() {
 
   const appendLive = (next: GroupMessageT[]) =>
     setLiveMessages((prev) => [...prev, ...next]);
+
+  const removeLive = (id: string) =>
+    setLiveMessages((prev) => prev.filter((m) => m.id !== id));
+
+  // File picker → validate + stage locally; surface the first rejection reason.
+  const handlePickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const { error } = attachments.addFiles(files);
+      if (error) toast.error(error);
+    }
+    // Reset so picking the same file again still fires onChange.
+    e.target.value = "";
+  };
 
   /**
    * Reveal a broadcast's persona replies one-by-one instead of all at once:
@@ -189,41 +220,77 @@ function GroupChatView() {
     const text = input.trim();
     if (!text || !groupId || ended || sending) return;
 
+    // Take ownership of the staged images so their previews keep rendering in
+    // the optimistic bubble.
+    const staged = attachments.takeAll();
+    const userMsgId = crypto.randomUUID();
     setInput("");
-    appendLive([{ id: crypto.randomUUID(), role: "user", message: text }]);
+    appendLive([
+      {
+        id: userMsgId,
+        role: "user",
+        message: text,
+        images: staged.map((s) => ({ url: s.previewUrl, name: s.file.name })),
+      },
+    ]);
 
-    if (target === ALL) {
-      broadcastMut.mutate(
-        { message: text },
-        {
-          onSuccess: (data) => {
-            revealSequentially(data.responses);
-            touchSession(groupId);
+    // Send the turn once any images are uploaded. Broadcast (Everyone) and a
+    // single-persona message both accept attachments.
+    const sendToServer = (fileIds?: string[]) => {
+      if (target === ALL) {
+        broadcastMut.mutate(
+          { message: text, fileIds },
+          {
+            onSuccess: (data) => {
+              revealSequentially(data.responses);
+              touchSession(groupId);
+            },
+            onError: handleSendError,
           },
-          onError: handleSendError,
-        },
-      );
-    } else {
-      singleMut.mutate(
-        { personaId: target, message: text },
-        {
-          onSuccess: (data) => {
-            appendLive([
-              {
-                id: crypto.randomUUID(),
-                role: "persona",
-                persona_name: data.response.persona_name,
-                message: data.response.message,
-                confidence_level: data.response.confidence_level,
-                confidence_score: data.response.confidence_score,
-              },
-            ]);
-            touchSession(groupId);
+        );
+      } else {
+        singleMut.mutate(
+          { personaId: target, message: text, fileIds },
+          {
+            onSuccess: (data) => {
+              appendLive([
+                {
+                  id: crypto.randomUUID(),
+                  role: "persona",
+                  persona_name: data.response.persona_name,
+                  message: data.response.message,
+                  confidence_level: data.response.confidence_level,
+                  confidence_score: data.response.confidence_score,
+                },
+              ]);
+              touchSession(groupId);
+            },
+            onError: handleSendError,
           },
-          onError: handleSendError,
-        },
-      );
+        );
+      }
+    };
+
+    if (staged.length === 0) {
+      sendToServer();
+      return;
     }
+
+    // Upload the images first, then send with their file_ids. On failure, roll
+    // back the optimistic bubble and restore the text + images to retry.
+    setUploading(true);
+    uploadGroupImages(
+      groupId,
+      staged.map((s) => s.file),
+    )
+      .then((fileIds) => sendToServer(fileIds))
+      .catch((err: Error) => {
+        removeLive(userMsgId);
+        setInput(text);
+        attachments.restore(staged);
+        toast.error(err?.message || "Couldn't upload images, please retry");
+      })
+      .finally(() => setUploading(false));
   };
 
   const handleSaveAssumptions = (next: string[]) => {
@@ -243,6 +310,8 @@ function GroupChatView() {
   const selectedParticipant = participants.find((p) => p.persona_id === target);
   const targetName =
     target === ALL ? "Everyone" : selectedParticipant?.persona_name;
+  const canAttach =
+    !ended && !sending && attachments.items.length < MAX_IMAGES;
 
   if (participantsQuery.isError || history.isError) {
     return (
@@ -330,8 +399,52 @@ function GroupChatView() {
             ? "Message everyone…"
             : `Message ${targetName ?? "persona"}…`
         }
+        attachmentBar={
+          attachments.items.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {attachments.items.map((it) => (
+                <div key={it.id} className="relative">
+                  <img
+                    src={it.previewUrl}
+                    alt={it.file.name}
+                    className="h-16 w-16 rounded-lg border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => attachments.removeItem(it.id)}
+                    aria-label={`Remove ${it.file.name}`}
+                    className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow ring-2 ring-background"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : undefined
+        }
         leftSlot={
-          <Select value={target} onValueChange={setTarget} disabled={ended}>
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              multiple
+              hidden
+              onChange={handlePickFiles}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-9 shrink-0 rounded-full"
+              disabled={!canAttach}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach images"
+              title="Attach images"
+            >
+              <ImagePlus size={18} />
+            </Button>
+            <Select value={target} onValueChange={setTarget} disabled={ended}>
             <SelectTrigger
               size="sm"
               aria-label="Choose who to message"
@@ -391,7 +504,8 @@ function GroupChatView() {
                 </SelectItem>
               ))}
             </SelectContent>
-          </Select>
+            </Select>
+          </>
         }
       />
 

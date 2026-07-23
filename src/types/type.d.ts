@@ -98,4 +98,7 @@ declare type GroupMessageT = {
     confidence_score?: number | null;
     /** True while an optimistic message is awaiting its server reply. */
     pending?: boolean;
+    /** Images attached to a user turn. `url` is a local object URL for the
+     * current session (server-side display URLs are not wired up yet). */
+    images?: { url: string; name: string }[];
 }

@@ -21,6 +21,8 @@ type RawPersonaReply = {
 type RawGroupTurn = {
   user_message: string | null;
   responses: RawPersonaReply[];
+  /** Images attached to the user's turn, with short-lived presigned view URLs. */
+  images?: { file_id: string; file_name: string; url: string }[];
 };
 
 type GroupHistoryResponse = {
@@ -69,6 +71,10 @@ export const useGroupHistory = (groupId: string | undefined) => {
           id: `${groupId}-h-${index}-u`,
           role: "user",
           message: data.user_message,
+          images: (data.images ?? []).map((img) => ({
+            url: img.url,
+            name: img.file_name,
+          })),
         });
       }
       (data.responses ?? []).forEach((r, j) => {
