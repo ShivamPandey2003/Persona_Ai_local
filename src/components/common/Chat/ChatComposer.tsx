@@ -18,6 +18,8 @@ type ChatComposerProps = {
   placeholder?: string;
   /** Optional control rendered on the left of the action row (e.g. a target selector). */
   leftSlot?: React.ReactNode;
+  /** Optional content rendered above the textarea (e.g. an attachment preview strip). */
+  attachmentBar?: React.ReactNode;
   /** Ref to the composer's root element (used to focus the textarea, e.g. when editing a message). */
   rootRef?: React.Ref<HTMLDivElement>;
 };
@@ -34,6 +36,7 @@ function ChatComposer({
   isSending = false,
   placeholder = "Ask anything",
   leftSlot,
+  attachmentBar,
   rootRef,
 }: ChatComposerProps) {
   const canSend = Boolean(value.trim()) && !disabled && !isSending;
@@ -57,6 +60,11 @@ function ChatComposer({
         className="border-input bg-popover/85 backdrop-blur-xl relative z-10 w-full rounded-3xl border p-0 pt-1 shadow-[0_8px_30px_-10px_rgba(16,24,40,0.18)]"
       >
         <div className="flex flex-col">
+          {attachmentBar && (
+            <div className="px-3 pt-2" onClick={(e) => e.stopPropagation()}>
+              {attachmentBar}
+            </div>
+          )}
           <PromptInputTextarea
             placeholder={disabled ? "This chat has ended" : placeholder}
             disabled={disabled}
