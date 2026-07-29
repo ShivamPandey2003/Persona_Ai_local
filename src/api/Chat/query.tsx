@@ -1,8 +1,9 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthToken, postApi } from "@/lib/api";
 import { getSession } from "@/lib/chatStore";
 import { useHistoryPager } from "@/hooks/useHistoryPager";
+import type { PersonaBuildStep } from "@/api/Persona/query";
 
 /**
  * History is stored one turn per row: a single `user_message` (null for the
@@ -14,9 +15,24 @@ type RawBuilderTurn = {
   response: string | null;
 };
 
+/**
+ * Snapshot of the persona-build background job tied to this conversation,
+ * returned by /chat/history on the newest page. Lets the transcript render the
+ * build's progress/outcome permanently (and resume polling if still running),
+ * instead of the loader vanishing once the live session ends. Absent for chats
+ * that never kicked off a build.
+ */
+export type BuilderBuildSnapshot = {
+  job_id: string;
+  status: "queued" | "running" | "done" | "failed";
+  progress: number;
+  steps: PersonaBuildStep[] | null;
+};
+
 type BuilderHistoryResponse = {
   messages: RawBuilderTurn[];
   pagination?: Pagination;
+  build?: BuilderBuildSnapshot | null;
 };
 
 /** Turns fetched per history window (matches the backend default). */
@@ -33,6 +49,12 @@ const HISTORY_PAGE_SIZE = 20;
 export const useBuilderHistory = (conversationId: string | undefined) => {
   const token = getAuthToken();
 
+  // Build snapshot lives on the newest page (offset 0) only. Captured here as the
+  // pager fetches that page, and reset when the conversation changes so a stale
+  // build from the previous chat never leaks in before the new fetch resolves.
+  const [build, setBuild] = useState<BuilderBuildSnapshot | null>(null);
+  useEffect(() => setBuild(null), [conversationId]);
+
   const fetchPage = useCallback(
     async (offset: number, limit: number) => {
       const data = await postApi<BuilderHistoryResponse>("persona/chat/history", {
@@ -41,6 +63,7 @@ export const useBuilderHistory = (conversationId: string | undefined) => {
         limit,
         offset,
       });
+      if (offset === 0) setBuild(data.build ?? null);
       const items = data.messages ?? [];
       return { items, total: data.pagination?.total ?? items.length };
     },
@@ -77,6 +100,7 @@ export const useBuilderHistory = (conversationId: string | undefined) => {
 
   return {
     messages,
+    build,
     isInitialLoading: pager.isInitialLoading,
     isError: pager.isError,
     ready: pager.ready,

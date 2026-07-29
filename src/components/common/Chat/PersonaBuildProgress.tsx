@@ -8,11 +8,23 @@ import {
   type PersonaBuildStep,
   type RunQueryPersona,
 } from "@/api/Persona/query";
+import type { BuilderBuildSnapshot } from "@/api/Chat/query";
 
 type PersonaBuildProgressProps = {
   jobId: string;
-  /** Fired once when the job finishes successfully, with its run_query output. */
-  onComplete: (personas: RunQueryPersona[]) => void;
+  /**
+   * Persisted snapshot from /chat/history. Used to seed the job query so a
+   * reopened chat renders the build's real (often already-done) state at once —
+   * no "Building…" loader flash before the first /job-status poll resolves.
+   */
+  snapshot?: BuilderBuildSnapshot;
+  /**
+   * Fired once when the job finishes successfully, with its run_query output.
+   * Omitted when the card is rehydrated from history for an already-settled
+   * build, so reopening an old conversation never re-toasts or re-opens the
+   * dashboard — the card just shows the final state.
+   */
+  onComplete?: (personas: RunQueryPersona[]) => void;
   /** Fired once when the job fails. */
   onError?: () => void;
   /** Open the persona dashboard regardless of job state. */
@@ -31,14 +43,24 @@ type PersonaBuildProgressProps = {
  */
 function PersonaBuildProgress({
   jobId,
+  snapshot,
   onComplete,
   onError,
   onViewPersonas,
 }: PersonaBuildProgressProps) {
-  const { data, isError } = usePersonaBuildJob(jobId);
+  // The history snapshot omits the heavy run_query `result` — the card doesn't
+  // need it, so seed it as null.
+  const { data, isError } = usePersonaBuildJob(
+    jobId,
+    snapshot ? { ...snapshot, result: null } : undefined,
+  );
 
   const status = data?.status ?? "running";
   const failed = status === "failed" || isError;
+  // The card now stays in the transcript after the job settles, so it must read
+  // as a finished record — not perpetually "building" — once done.
+  const done = status === "done" && !isError;
+  const running = !failed && !done;
   const steps = data?.steps ?? null;
   const hasSteps = Array.isArray(steps) && steps.length > 0;
   const progress = data?.progress ?? 0;
@@ -49,7 +71,7 @@ function PersonaBuildProgress({
     if (settledRef.current) return;
     if (status === "done") {
       settledRef.current = true;
-      onComplete(data?.result?.personas ?? []);
+      onComplete?.(data?.result?.personas ?? []);
     } else if (failed) {
       settledRef.current = true;
       onError?.();
@@ -60,19 +82,25 @@ function PersonaBuildProgress({
     <div className="mx-auto w-full max-w-2xl rounded-xl border bg-card p-5 shadow-sm duration-300 animate-in fade-in slide-in-from-bottom-2">
       <div className="flex items-center gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
-          <Settings className={cn("h-5 w-5", !failed && "animate-spin")} />
+          <Settings className={cn("h-5 w-5", running && "animate-spin")} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
-            {failed ? "Couldn't build your personas" : "Building Your Personas…"}
+            {failed
+              ? "Couldn't build your personas"
+              : done
+                ? "Personas built"
+                : "Building Your Personas…"}
           </p>
           <p className="text-xs text-muted-foreground">
             {failed
               ? "Something went wrong while analysing the data."
-              : "Analysing your survey data — this can take a moment."}
+              : done
+                ? "Your personas are ready."
+                : "Analysing your survey data — this can take a moment."}
           </p>
         </div>
-        {!failed && (
+        {running && (
           <Loader2 className="h-5 w-5 shrink-0 animate-spin text-muted-foreground" />
         )}
       </div>
