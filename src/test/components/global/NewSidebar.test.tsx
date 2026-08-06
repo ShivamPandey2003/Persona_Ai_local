@@ -59,6 +59,33 @@ describe("NewAppSidebar", () => {
     expect(await screen.findByText("Persona chat")).toBeInTheDocument();
   });
 
+  it("renders the server title and a rename affordance per recents row", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat-list`, () =>
+        ok({
+          builder_chats: [
+            {
+              conversation_id: "c1",
+              project_id: "p1",
+              status: "active",
+              title: "Low-sugar hydration",
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-02T00:00:00Z",
+            },
+          ],
+          group_chats: [],
+        }),
+      ),
+    );
+    renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
+
+    // The backend-provided title wins over the default label.
+    expect(await screen.findByText("Low-sugar hydration")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /chat options/i }),
+    ).toBeInTheDocument();
+  });
+
   it("opens the persona group-chat dialog via redux", async () => {
     const { user, store } = renderSidebar({
       pathname: "/chat/c1",

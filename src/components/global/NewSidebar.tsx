@@ -1,5 +1,15 @@
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { Home, Settings, LayoutDashboard, Plus, Users, MessageSquare } from "lucide-react";
+import {
+  Home,
+  Settings,
+  LayoutDashboard,
+  Plus,
+  Users,
+  MessageSquare,
+  MoreHorizontal,
+  Pencil,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,6 +23,12 @@ import {
   SidebarGroupContent,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NavUser } from "./NavUser";
 import { Logo } from "@/assets";
 import { cn } from "@/lib/utils";
@@ -20,7 +36,8 @@ import { setPersonaDialog } from "@/redux/ProjectSlice";
 import { useDispatch } from "react-redux";
 import type { AppDispatch } from "@/redux/store";
 import { ScrollArea } from "../ui/scroll-area";
-import { useChatList } from "@/api/Chat/query";
+import { useChatList, type RecentChat } from "@/api/Chat/query";
+import { RenameChatDialog } from "../common/Chat/RenameChatDialog";
 import { useActiveProjectId, chatIdFromPath } from "@/hooks/useActiveProjectId";
 
 const items = [
@@ -44,6 +61,9 @@ export function NewAppSidebar() {
   // and devices); freshly started chats appear once their start call invalidates
   // the ["ChatList", projectId] query.
   const { data: sessions = [], isLoading } = useChatList(projectId);
+
+  // The Recents row currently open in the rename dialog (null = dialog closed).
+  const [renameTarget, setRenameTarget] = useState<RecentChat | null>(null);
 
   const startNewChat = () => {
     if (!projectId) return;
@@ -170,12 +190,15 @@ export function NewAppSidebar() {
                           animationDelay: `${Math.min(index, 10) * 30}ms`,
                           animationFillMode: "backwards",
                         }}
-                        className="duration-300 animate-in fade-in slide-in-from-left-1"
+                        // Lay the row out as [link | ⋯] so the rename button is
+                        // always in-flow (never absolutely positioned off-screen
+                        // by a long title) and the title truncates beside it.
+                        className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 duration-300 animate-in fade-in slide-in-from-left-1"
                       >
                         <SidebarMenuButton
                           asChild
                           isActive={session.id === activeId}
-                          className="data-active:bg-primary! data-active:text-white"
+                          className="min-w-0 max-w-full data-active:bg-primary! data-active:text-white"
                         >
                           <Link
                             to={session.to}
@@ -183,11 +206,35 @@ export function NewAppSidebar() {
                             title={session.title}
                           >
                             <Icon size={14} className="shrink-0" />
-                            <span className="overflow-hidden text-ellipsis whitespace-nowrap max-w-full">
+                            {/* min-w-0 lets the title ellipsize instead of
+                                expanding the row past the sidebar. */}
+                            <span className="min-w-0 flex-1 truncate">
                               {session.title}
                             </span>
                           </Link>
                         </SidebarMenuButton>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            {/* Shown on every row (short or long title) so the
+                                rename affordance is always reachable. */}
+                            <button
+                              type="button"
+                              aria-label="Chat options"
+                              className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#6B7280] transition-colors hover:bg-[#6338F6]/10 hover:text-[#6338F6] focus-visible:ring-2 focus-visible:ring-[#6338F6]/40 focus-visible:outline-none"
+                            >
+                              <MoreHorizontal size={16} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent side="right" align="start">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => setRenameTarget(session)}
+                            >
+                              <Pencil size={14} className="mr-2" />
+                              Rename
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </SidebarMenuItem>
                     );
                   })}
@@ -201,6 +248,12 @@ export function NewAppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
+
+      {/* Rename dialog — mounted once; opens when a Recents row is selected. */}
+      <RenameChatDialog
+        chat={renameTarget}
+        onClose={() => setRenameTarget(null)}
+      />
 
       {/* FOOTER: Profile Management */}
       <SidebarFooter

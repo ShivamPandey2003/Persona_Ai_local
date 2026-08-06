@@ -50,6 +50,97 @@ describe("useChatList", () => {
     expect(items[1]).toMatchObject({ id: "b1", kind: "builder", to: "/chat/b1" });
   });
 
+  it("orders by last activity (updated_at), not creation time", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat-list`, () =>
+        ok({
+          builder_chats: [
+            {
+              // Created first, but messaged most recently -> should sort first.
+              conversation_id: "b1",
+              project_id: "p1",
+              status: "active",
+              title: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-03-01T00:00:00Z",
+            },
+          ],
+          group_chats: [
+            {
+              group_id: "g1",
+              project_id: "p1",
+              persona_ids: ["x"],
+              status: "active",
+              title: null,
+              created_at: "2026-02-01T00:00:00Z",
+              updated_at: "2026-02-01T00:00:00Z",
+            },
+          ],
+        }),
+      ),
+    );
+    const { Wrapper } = createHookWrapper();
+    const { result } = renderHook(() => useChatList("p1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const items = result.current.data!;
+    // b1's newer updated_at wins over g1's newer created_at.
+    expect(items.map((i) => i.id)).toEqual(["b1", "g1"]);
+    expect(items[0].updatedAt).toBe(Date.parse("2026-03-01T00:00:00Z"));
+  });
+
+  it("falls back to created_at when updated_at is missing", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat-list`, () =>
+        ok({
+          builder_chats: [
+            {
+              conversation_id: "b1",
+              project_id: "p1",
+              status: "active",
+              title: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: null,
+            },
+          ],
+          group_chats: [],
+        }),
+      ),
+    );
+    const { Wrapper } = createHookWrapper();
+    const { result } = renderHook(() => useChatList("p1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data![0].updatedAt).toBe(
+      Date.parse("2026-01-01T00:00:00Z"),
+    );
+  });
+
+  it("prefers the server-provided title over the default label", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat-list`, () =>
+        ok({
+          builder_chats: [
+            {
+              conversation_id: "b1",
+              project_id: "p1",
+              status: "active",
+              title: "Low-sugar hydration",
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:00Z",
+            },
+          ],
+          group_chats: [],
+        }),
+      ),
+    );
+    const { Wrapper } = createHookWrapper();
+    const { result } = renderHook(() => useChatList("p1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data![0].title).toBe("Low-sugar hydration");
+  });
+
   it("is disabled without a projectId", () => {
     const { Wrapper } = createHookWrapper();
     const { result } = renderHook(() => useChatList(undefined), {
