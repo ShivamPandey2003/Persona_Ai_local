@@ -42,9 +42,14 @@ export const CreateProject = (cb:()=>void) => {
       return data.response;
     },
     onSuccess: (response) => {
-      navigate(`/chat`, {
+      // After creating a project, route to the data-file upload step (which
+      // runs the background pipeline) before handing off to the builder chat.
+      // projectId is in the path so the page survives a refresh.
+      const projectId = response.response.project_id;
+      navigate(`/upload/${projectId}`, {
         state: {
-          projectId: response.response.project_id,
+          projectId,
+          fromCreate: true,
         },
       });
       queryClient.invalidateQueries({queryKey:["ProjectList"]})
