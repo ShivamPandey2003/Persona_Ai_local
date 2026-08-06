@@ -5,13 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * backend limits (app/core/config.py) so obviously-invalid files are rejected
  * before we ever request a presigned URL.
  */
-export const MAX_IMAGES = 10;
+export const MAX_IMAGES = 5;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 export const ALLOWED_IMAGE_TYPES = [
   "image/png",
   "image/jpeg",
   "image/webp",
-  "image/gif",
+  "image/jpg",
 ] as const;
 /** `accept` attribute for the file input. */
 export const IMAGE_ACCEPT = ALLOWED_IMAGE_TYPES.join(",");

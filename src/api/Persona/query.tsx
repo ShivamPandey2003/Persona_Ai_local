@@ -144,8 +144,19 @@ const JOB_POLL_INTERVAL_MS = 1200;
  * and stops once it is done/failed, so the progress bar advances live without a
  * manual interval. Disabled until a jobId is provided.
  */
-export const usePersonaBuildJob = (jobId: string | null | undefined) => {
+export const usePersonaBuildJob = (
+  jobId: string | null | undefined,
+  /**
+   * Seed from /chat/history so a reopened chat paints the build's real state on
+   * the first render instead of defaulting to the "running" loader until the
+   * first poll returns. When it seeds an already-settled build, the query is kept
+   * fresh (staleTime ∞) so it never polls — there is nothing left to watch.
+   */
+  initialData?: PersonaBuildJob,
+) => {
   const token = getAuthToken();
+  const settled =
+    initialData?.status === "done" || initialData?.status === "failed";
   return useQuery<PersonaBuildJob>({
     queryKey: ["PersonaBuildJob", jobId],
     queryFn: () =>
@@ -154,6 +165,8 @@ export const usePersonaBuildJob = (jobId: string | null | undefined) => {
         job_id: jobId,
       }),
     enabled: Boolean(token && jobId),
+    initialData,
+    staleTime: settled ? Infinity : 0,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "done" || status === "failed" ? false : JOB_POLL_INTERVAL_MS;

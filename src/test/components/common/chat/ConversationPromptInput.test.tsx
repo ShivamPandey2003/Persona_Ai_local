@@ -86,6 +86,42 @@ describe("ConversationPromptInput", () => {
     expect(await screen.findByText(/this conversation has ended/i)).toBeInTheDocument();
   });
 
+  it("rehydrates a finished build card from history when the chat is reopened", async () => {
+    const doneStep = {
+      key: "finalizing",
+      label: "Saving results",
+      status: "done",
+      done: 2,
+      failed: 0,
+      total: 2,
+    };
+    server.use(
+      http.post(`${API_URL}persona/chat/history`, () =>
+        ok({
+          messages: [{ user_message: "make personas", response: "Building now" }],
+          pagination: { total: 1 },
+          // The persisted build snapshot: the loader is long gone, but the
+          // outcome must still show in the transcript.
+          build: { job_id: "job-9", status: "done", progress: 100, steps: [doneStep] },
+        }),
+      ),
+      http.post(`${API_URL}projects/job-status`, () =>
+        ok({
+          job_id: "job-9",
+          status: "done",
+          progress: 100,
+          result: { personas: [] },
+          steps: [doneStep],
+        }),
+      ),
+    );
+
+    renderWithProviders(<ConversationPromptInput />);
+    // Reads as a finished record, not a perpetual "building" state.
+    expect(await screen.findByText(/personas built/i)).toBeInTheDocument();
+    expect(screen.getByText("Saving results")).toBeInTheDocument();
+  });
+
   it("shows an error message when the history fails to load", async () => {
     server.use(
       http.post(`${API_URL}persona/chat/history`, () => envelopeError(500, "error")),

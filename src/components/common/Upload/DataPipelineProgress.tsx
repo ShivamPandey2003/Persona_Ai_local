@@ -1,64 +1,33 @@
 import { useEffect, useRef } from "react";
-import { CheckCircle2, Circle, Loader2, Settings, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, Database, Loader2, XCircle } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  usePersonaBuildJob,
-  type PersonaBuildStep,
-  type RunQueryPersona,
-} from "@/api/Persona/query";
-import type { BuilderBuildSnapshot } from "@/api/Chat/query";
+  useDataFilePipelineJob,
+  type DataPipelineStep,
+} from "@/api/Projects/dataFiles";
 
-type PersonaBuildProgressProps = {
+type Props = {
   jobId: string;
-  /**
-   * Persisted snapshot from /chat/history. Used to seed the job query so a
-   * reopened chat renders the build's real (often already-done) state at once —
-   * no "Building…" loader flash before the first /job-status poll resolves.
-   */
-  snapshot?: BuilderBuildSnapshot;
-  /**
-   * Fired once when the job finishes successfully, with its run_query output.
-   * Omitted when the card is rehydrated from history for an already-settled
-   * build, so reopening an old conversation never re-toasts or re-opens the
-   * dashboard — the card just shows the final state.
-   */
-  onComplete?: (personas: RunQueryPersona[]) => void;
-  /** Fired once when the job fails. */
+  /** Fired once when the pipeline finishes successfully. */
+  onComplete?: () => void;
+  /** Fired once when the pipeline fails. */
   onError?: () => void;
-  /** Open the persona dashboard regardless of job state. */
-  onViewPersonas?: () => void;
 };
 
 /**
- * Loader shown while the persona_query (run_query) background job runs. Polls
- * /projects/job-status (via {@link usePersonaBuildJob}) and calls onComplete /
- * onError exactly once when the job settles, so the parent can open the
- * dashboard.
- *
- * When the job reports `steps`, it renders a live per-step stepper (each step
- * carries a "done / total personas" count); otherwise it falls back to a plain
- * indeterminate loader.
+ * Loader shown while the file_pipeline background job runs. Polls
+ * /projects/job-status (via {@link useDataFilePipelineJob}) and calls
+ * onComplete / onError exactly once when the job settles. Renders a live
+ * per-step stepper from the job's `steps` (each step carries a "done / total
+ * files" count), falling back to an indeterminate sweep when steps are absent.
+ * Visual twin of the persona-build progress card.
  */
-function PersonaBuildProgress({
-  jobId,
-  snapshot,
-  onComplete,
-  onError,
-  onViewPersonas,
-}: PersonaBuildProgressProps) {
-  // The history snapshot omits the heavy run_query `result` — the card doesn't
-  // need it, so seed it as null.
-  const { data, isError } = usePersonaBuildJob(
-    jobId,
-    snapshot ? { ...snapshot, result: null } : undefined,
-  );
+function DataPipelineProgress({ jobId, onComplete, onError }: Props) {
+  const { data, isError } = useDataFilePipelineJob(jobId);
 
   const status = data?.status ?? "running";
   const failed = status === "failed" || isError;
-  // The card now stays in the transcript after the job settles, so it must read
-  // as a finished record — not perpetually "building" — once done.
   const done = status === "done" && !isError;
   const running = !failed && !done;
   const steps = data?.steps ?? null;
@@ -71,33 +40,33 @@ function PersonaBuildProgress({
     if (settledRef.current) return;
     if (status === "done") {
       settledRef.current = true;
-      onComplete?.(data?.result?.personas ?? []);
+      onComplete?.();
     } else if (failed) {
       settledRef.current = true;
       onError?.();
     }
-  }, [status, failed, data?.result?.personas, onComplete, onError]);
+  }, [status, failed, onComplete, onError]);
 
   return (
     <div className="mx-auto w-full max-w-2xl rounded-xl border bg-card p-5 shadow-sm duration-300 animate-in fade-in slide-in-from-bottom-2">
       <div className="flex items-center gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
-          <Settings className={cn("h-5 w-5", running && "animate-spin")} />
+          <Database className={cn("h-5 w-5", running && "animate-pulse")} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
             {failed
-              ? "Couldn't build your personas"
+              ? "Couldn't process your data"
               : done
-                ? "Personas built"
-                : "Building Your Personas…"}
+                ? "Data processed"
+                : "Processing your data…"}
           </p>
           <p className="text-xs text-muted-foreground">
             {failed
-              ? "Something went wrong while analysing the data."
+              ? "Something went wrong while processing the uploaded files."
               : done
-                ? "Your personas are ready."
-                : "Analysing your survey data — this can take a moment."}
+                ? "Your data is ready. Taking you to the persona builder…"
+                : "Analysing your uploaded files — this can take a moment."}
           </p>
         </div>
         {running && (
@@ -106,7 +75,7 @@ function PersonaBuildProgress({
       </div>
 
       {/* Progress bar: determinate when steps report a percentage, else an
-          indeterminate transform-based sweep. Rose + full when failed. */}
+          indeterminate sweep. Rose + full when failed. */}
       <div className="relative mt-4 h-1.5 overflow-hidden rounded-full bg-secondary">
         {failed ? (
           <div className="h-full w-full rounded-full bg-rose-500" />
@@ -127,30 +96,19 @@ function PersonaBuildProgress({
           ))}
         </ul>
       )}
-
-      {failed && onViewPersonas && (
-        <div className="mt-4 flex justify-end">
-          <Button variant="outline" size="sm" onClick={onViewPersonas}>
-            View personas anyway
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
 
-/** One row of the build stepper: status icon + label + "x / total" persona count. */
+/** One row of the pipeline stepper: status icon + label + "x / total" file count. */
 function StepRow({
   step,
   jobFailed,
 }: {
-  step: PersonaBuildStep;
+  step: DataPipelineStep;
   jobFailed: boolean;
 }) {
-  // If the whole job failed, steps still mid-flight read as failed rather than
-  // spinning forever.
-  const status =
-    jobFailed && step.status !== "done" ? "failed" : step.status;
+  const status = jobFailed && step.status !== "done" ? "failed" : step.status;
   const isDone = status === "done";
   const isRunning = status === "running";
   const isFailed = status === "failed";
@@ -181,7 +139,7 @@ function StepRow({
         {step.label}
       </span>
 
-      {/* Per-step persona count, only meaningful with more than one persona. */}
+      {/* Per-step file count, only meaningful with more than one file. */}
       {step.total > 1 && (
         <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
           {Math.min(step.done, step.total)}/{step.total}
@@ -194,4 +152,4 @@ function StepRow({
   );
 }
 
-export default PersonaBuildProgress;
+export default DataPipelineProgress;

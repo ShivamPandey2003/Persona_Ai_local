@@ -43,8 +43,15 @@ function ConversationPromptInput() {
   const [liveMessages, setLiveMessages] = useState<MessageT[]>([]);
   const [input, setInput] = useState("");
   const [endedLocal, setEndedLocal] = useState(false);
-  // persona_query job id while the "Building Your Personas…" loader runs.
+  // persona_query job whose build card is shown in the transcript. Set while the
+  // build runs AND kept after it settles, so the outcome (success/failure + the
+  // steps) stays in the chat history instead of vanishing. Sourced live from the
+  // send response, or rehydrated from history.build when the chat is reopened.
   const [queryJobId, setQueryJobId] = useState<string | null>(null);
+  // True only while a build is actually in flight (this session, or a still-
+  // running one we resumed). Gates the celebratory toast + auto-open dashboard so
+  // reopening a long-finished build never re-announces it.
+  const [buildAnnounce, setBuildAnnounce] = useState(false);
   // True only once the job finished AND produced real study/evidence data —
   // drives the celebratory pulse on the "View Personas" button.
   const [personasReady, setPersonasReady] = useState(false);
@@ -79,9 +86,22 @@ function ConversationPromptInput() {
     setLiveMessages([]);
     setEndedLocal(false);
     setPersonasReady(false);
-    // Resume the build progress if the user left while a job was still running.
-    setQueryJobId(getSession(conversationId)?.queryJobId ?? null);
+    // Start clean; the build card is re-sourced from history.build below (durable
+    // and cross-device), so a still-running build resumes once history loads.
+    setQueryJobId(null);
+    setBuildAnnounce(false);
   }, [conversationId]);
+
+  // Rehydrate the build card from the persisted snapshot: resume polling if it's
+  // still running, or show the final done/failed card permanently. Only announce
+  // for a build still in flight — one that already settled before this load is
+  // history, not a fresh completion, so it must not re-toast / re-open the panel.
+  useEffect(() => {
+    const b = history.build;
+    if (!b) return;
+    setQueryJobId(b.job_id);
+    setBuildAnnounce(b.status === "queued" || b.status === "running");
+  }, [history.build]);
 
   const stbRef = useRef<StickToBottomContext | null>(null);
   const getScrollEl = useCallback(
@@ -136,8 +156,9 @@ function ConversationPromptInput() {
    * data for at least one persona. */
   const handleBuildComplete = useCallback(
     (personas: RunQueryPersona[] = []) => {
-      if (conversationId) touchSession(conversationId, { queryJobId: null });
-      setQueryJobId(null);
+      // Keep the (now complete) card in the transcript as the durable record of
+      // the build; just stop announcing so it can't re-fire on re-render.
+      setBuildAnnounce(false);
       const hasData = personas.some(
         (p) =>
           (p.study_summary?.length ?? 0) > 0 ||
@@ -148,15 +169,16 @@ function ConversationPromptInput() {
       toast.success("Your personas are ready!");
       openPersonaPanel();
     },
-    [conversationId, invalidatePersonas, openPersonaPanel],
+    [invalidatePersonas, openPersonaPanel],
   );
 
   /** persona_query job failed: personas exist but without run_query evidence. */
   const handleBuildError = useCallback(() => {
-    if (conversationId) touchSession(conversationId, { queryJobId: null });
+    // Keep the failed card visible as the record; stop announcing.
+    setBuildAnnounce(false);
     invalidatePersonas();
     toast.error("Personas were built, but analysing their data didn't finish.");
-  }, [conversationId, invalidatePersonas]);
+  }, [invalidatePersonas]);
 
   const handleSend = () => {
     const text = input.trim();
@@ -191,8 +213,8 @@ function ConversationPromptInput() {
           if (data.building_persona === 1) {
             markEnded();
             if (data.job_id) {
-              touchSession(conversationId, { queryJobId: data.job_id });
               setQueryJobId(data.job_id);
+              setBuildAnnounce(true);
             } else {
               handleBuildComplete();
             }
@@ -216,7 +238,7 @@ function ConversationPromptInput() {
           open automatically once the build completes. */}
       <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center justify-between gap-4 px-4 py-2">
         <span className="text-xs font-medium text-muted-foreground">
-          {queryJobId
+          {buildAnnounce
             ? "Building personas…"
             : ended
               ? "Personas ready"
@@ -267,8 +289,14 @@ function ConversationPromptInput() {
           {queryJobId && (
             <PersonaBuildProgress
               jobId={queryJobId}
-              onComplete={handleBuildComplete}
-              onError={handleBuildError}
+              // Seed the card from the persisted snapshot when it's for this same
+              // job, so a reopened finished build shows its result immediately
+              // (no loader flash). Absent for a build kicked off live this session.
+              snapshot={
+                history.build?.job_id === queryJobId ? history.build : undefined
+              }
+              onComplete={buildAnnounce ? handleBuildComplete : undefined}
+              onError={buildAnnounce ? handleBuildError : undefined}
               onViewPersonas={openPersonaPanel}
             />
           )}
