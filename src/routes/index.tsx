@@ -9,7 +9,6 @@ import SettingsPage from "@/pages/setting";
 import PrivacyPolicyPage from "@/pages/Privacy-policy";
 import HomePage from "@/pages/Test";
 import PersonaAILoginPage from "@/pages/Login2";
-import UploadPage from "@/pages/Upload";
 
 const Router = createBrowserRouter([
   {
@@ -49,17 +48,6 @@ const Router = createBrowserRouter([
       {
         path: ":groupId",
         element: <GroupChatPage />,
-      },
-    ],
-  },
-  {
-    // Post-create data-file upload step (before the persona builder chat).
-    path: "/upload",
-    element: <ProtectedRoute element={<Rootlayout />} />,
-    children: [
-      {
-        path: ":projectId",
-        element: <UploadPage />,
       },
     ],
   },
