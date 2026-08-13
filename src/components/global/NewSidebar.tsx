@@ -193,12 +193,12 @@ export function NewAppSidebar() {
                         // Lay the row out as [link | ⋯] so the rename button is
                         // always in-flow (never absolutely positioned off-screen
                         // by a long title) and the title truncates beside it.
-                        className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 duration-300 animate-in fade-in slide-in-from-left-1"
+                        className="flex items-center gap-1 duration-300 animate-in fade-in slide-in-from-left-1"
                       >
                         <SidebarMenuButton
                           asChild
                           isActive={session.id === activeId}
-                          className="min-w-0 max-w-full data-active:bg-primary! data-active:text-white"
+                          className="min-w-0 flex-1 data-active:bg-primary! data-active:text-white"
                         >
                           <Link
                             to={session.to}
