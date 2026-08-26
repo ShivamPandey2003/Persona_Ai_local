@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -96,7 +96,7 @@ function UploadPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-1">
         {/* Left: upload / progress */}
         <Card>
           <CardHeader>
@@ -104,6 +104,24 @@ function UploadPage() {
             <CardDescription>
               Upload one or more .xlsx or .sav files.
             </CardDescription>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+              <a
+                href="/instructions.pdf"
+                download
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download instructions
+              </a>
+              <a
+                href="/sample_data.xlsx"
+                download
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download sample Excel file
+              </a>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {phase === "processing" && jobId ? (
@@ -153,7 +171,7 @@ function UploadPage() {
         </Card>
 
         {/* Right: required format example */}
-        <RequiredFormatCard />
+        {/* <RequiredFormatCard /> */}
       </div>
     </div>
   );
