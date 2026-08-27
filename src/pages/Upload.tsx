@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import DataFileDropzone from "@/components/common/Upload/DataFileDropzone";
 import DataPipelineProgress from "@/components/common/Upload/DataPipelineProgress";
-import RequiredFormatCard from "@/components/common/Upload/RequiredFormatCard";
+// import RequiredFormatCard from "@/components/common/Upload/RequiredFormatCard";
 import { useDataFileSelection } from "@/hooks/useDataFileSelection";
 import { uploadDataFiles, useProcessDataFiles } from "@/api/Projects/dataFiles";
 
