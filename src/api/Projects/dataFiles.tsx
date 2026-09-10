@@ -41,6 +41,68 @@ export const useDataFileSchema = () => {
 };
 
 /* ------------------------------------------------------------------ */
+/* Project data state (is the upload step open? is a run going?)      */
+/* ------------------------------------------------------------------ */
+
+/** Why the data-upload step is closed for a project. */
+export type UploadLockedReason =
+  | "chat_started"
+  | "personas_built"
+  | "data_processed";
+
+export type ProjectDataState = {
+  project_id: string;
+  /**
+   * True while the project has no processed data, no personas and no user
+   * messages — i.e. the user created it and has not started working in it yet,
+   * so the upload step is still theirs to complete.
+   */
+  upload_allowed: boolean;
+  locked_reason: UploadLockedReason | null;
+  /** A pipeline still running — what a user who closed the tab comes back to. */
+  active_job: DataPipelineJob | null;
+  /** A run that failed while nobody was watching. */
+  last_failed_job: {
+    job_id: string;
+    error: { error_code: string; message: string; retryable?: boolean };
+  } | null;
+  counts: { processed_files: number; personas: number };
+};
+
+/** react-query key, exported so callers can invalidate it after changing state. */
+export const projectDataStateKey = (projectId: string | undefined) => [
+  "ProjectDataState",
+  projectId,
+];
+
+/**
+ * POST /v1/projects/data-state — where a project stands in the setup step.
+ *
+ * Read at two moments, for the same reason: opening a project (should the upload
+ * step be shown at all?) and loading the upload page (is a pipeline already
+ * running?).
+ *
+ * `staleTime: 0` on purpose — this gates navigation, so answering from a cache
+ * that predates a chat message would route the user back into an upload step
+ * they have already left behind.
+ */
+export const useProjectDataState = (projectId: string | undefined) => {
+  const token = getAuthToken();
+  return useQuery<ProjectDataState>({
+    queryKey: projectDataStateKey(projectId),
+    queryFn: () =>
+      postApi<ProjectDataState>("projects/data-state", {
+        token,
+        project_id: projectId,
+      }),
+    enabled: Boolean(token && projectId),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+};
+
+/* ------------------------------------------------------------------ */
 /* Proxy upload (browser -> API -> S3)                                */
 /* ------------------------------------------------------------------ */
 

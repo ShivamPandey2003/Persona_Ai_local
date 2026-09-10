@@ -13,6 +13,12 @@ type ChatComposerProps = {
   onSubmit: () => void;
   /** Disables the whole composer (e.g. chat ended). */
   disabled?: boolean;
+  /**
+   * Placeholder shown while `disabled`. Defaults to the ended-chat copy, which
+   * is the usual reason — pass this when the composer is blocked for some other
+   * reason, so the box explains the right one.
+   */
+  disabledPlaceholder?: string;
   /** Shows a spinner on the send button while a reply is in flight. */
   isSending?: boolean;
   placeholder?: string;
@@ -33,6 +39,7 @@ function ChatComposer({
   onChange,
   onSubmit,
   disabled = false,
+  disabledPlaceholder = "This chat has ended",
   isSending = false,
   placeholder = "Ask anything",
   leftSlot,
@@ -66,7 +73,7 @@ function ChatComposer({
             </div>
           )}
           <PromptInputTextarea
-            placeholder={disabled ? "This chat has ended" : placeholder}
+            placeholder={disabled ? disabledPlaceholder : placeholder}
             disabled={disabled}
             className="min-h-[44px] pt-3 pl-4 text-base leading-[1.3] sm:text-base md:text-base"
           />

@@ -124,3 +124,75 @@ export const useGroupChatParticipants = (groupId: string | undefined) => {
     staleTime: Infinity,
   });
 };
+
+/* ------------------------------------------------------------------ */
+/* Assumptions                                                        */
+/* ------------------------------------------------------------------ */
+
+type GroupAssumptionsResponse = {
+  assumptions: GroupAssumption[];
+  count: number;
+  max_allowed: number;
+};
+
+/** Cache key shared by the header badge and the dialog, so applying an
+ *  assumption in the dialog updates the count without a second request. */
+export const groupAssumptionsKey = (groupId: string | undefined) => [
+  "GroupAssumptions",
+  groupId,
+];
+
+/**
+ * POST /v1/persona/group-chat/assumptions/list — the statements currently
+ * shaping every persona reply in this group.
+ *
+ * Unlike the old bulk-set endpoint this is a real read path, so the list
+ * survives a reload instead of living only in component state.
+ *
+ * Applied assumptions only. Suggestions are never stored server-side — see
+ * ``useHeldSuggestions`` for where those live.
+ */
+export const useGroupAssumptions = (groupId: string | undefined) => {
+  const token = getAuthToken();
+  return useQuery<GroupAssumptionsResponse>({
+    queryKey: groupAssumptionsKey(groupId),
+    queryFn: () =>
+      postApi<GroupAssumptionsResponse>("persona/group-chat/assumptions/list", {
+        token,
+        group_id: groupId,
+      }),
+    enabled: Boolean(token && groupId),
+    refetchOnWindowFocus: false,
+  });
+};
+
+
+export const groupSuggestionsKey = (groupId: string | undefined) => [
+  "GroupAssumptionSuggestions",
+  groupId,
+];
+
+/**
+ * The suggestions currently on offer for a group.
+ *
+ * Cache-only — there is nothing to fetch. The server stores no suggestions, so
+ * this query never runs a request; `useSuggestAssumptions` writes each round's
+ * result under this key and this hook reads it back.
+ *
+ * The cache is the right home rather than component state because of the
+ * lifetime it gives them: they survive closing and reopening the dialog, so an
+ * accidental close does not cost an LLM call, and they are keyed by group, so
+ * switching chats never shows one group's ideas in another. They are gone on a
+ * reload, which is the intended limit — nothing about them is persisted
+ * anywhere, and re-asking is one button press.
+ */
+export const useHeldSuggestions = (groupId: string | undefined) =>
+  useQuery<AssumptionSuggestion[]>({
+    queryKey: groupSuggestionsKey(groupId),
+    // Never runs: the query is permanently disabled and only ever written to.
+    queryFn: () => [],
+    enabled: false,
+    initialData: [],
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });

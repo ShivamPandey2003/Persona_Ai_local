@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
+import { Route, Routes } from "react-router";
 import { http } from "msw";
 import { renderWithProviders } from "@/test/test-utils";
 import { server } from "@/test/msw/server";
-import { API_URL, ok, envelopeError } from "@/test/msw/handlers";
+import {
+  API_URL,
+  ok,
+  envelopeError,
+  dataStateResponse,
+} from "@/test/msw/handlers";
 import { authenticate } from "@/test/factories";
 import ChatEntry from "../../../../components/common/Chat/ChatEntry";
 
@@ -43,12 +49,69 @@ describe("ChatEntry", () => {
     expect(await screen.findByText("Alpha")).toBeInTheDocument();
   });
 
-  it("starts a new builder conversation when the project has no personas", async () => {
+  it("sends the user back to the upload step while the project is untouched", async () => {
+    let chatCreated = false;
     server.use(
+      http.post(`${API_URL}projects/data-state`, () =>
+        ok(dataStateResponse({ upload_allowed: true, locked_reason: null })),
+      ),
+      http.post(`${API_URL}persona/list`, () => ok({ personas: [] })),
+      http.post(`${API_URL}persona/chat/message`, () => {
+        chatCreated = true;
+        return ok({ id: "conv-new", messages: [], building_persona: 0 });
+      }),
+    );
+    // Rendered inside a route tree because the diversion is a <Navigate>, so it
+    // is only observable as the destination actually rendering.
+    renderWithProviders(
+      <Routes>
+        <Route path="/chat" element={<ChatEntry />} />
+        <Route path="/upload/:projectId" element={<p>Upload your data</p>} />
+      </Routes>,
+      atProject(),
+    );
+
+    expect(await screen.findByText("Upload your data")).toBeInTheDocument();
+    // The redirect must win the race: a conversation created here is one the
+    // user never asked for, and it would be left behind on the upload step.
+    expect(chatCreated).toBe(false);
+  });
+
+  it("does not divert back to upload when the upload step hands off", async () => {
+    // Covers both handoffs — "Skip for now" and a pipeline that just finished.
+    // The flag rides in route state, so it lasts exactly one navigation: without
+    // it, either one bounces straight back to the step it just left.
+    server.use(
+      http.post(`${API_URL}projects/data-state`, () =>
+        ok(dataStateResponse({ upload_allowed: true, locked_reason: null })),
+      ),
       http.post(`${API_URL}persona/list`, () => ok({ personas: [] })),
       http.post(`${API_URL}persona/chat/message`, () =>
         ok({ id: "conv-new", messages: [], building_persona: 0 }),
       ),
+    );
+    renderWithProviders(
+      <ChatEntry />,
+      atProject({ projectId: "p1", fromUpload: true }),
+    );
+
+    await waitFor(() =>
+      expect(navigateSpy).toHaveBeenCalledWith(
+        "/chat/conv-new",
+        expect.objectContaining({ replace: true }),
+      ),
+    );
+    expect(navigateSpy).not.toHaveBeenCalledWith("/upload/p1", { replace: true });
+  });
+
+  it("starts a new builder conversation when the project has no personas", async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.post(`${API_URL}persona/list`, () => ok({ personas: [] })),
+      http.post(`${API_URL}persona/chat/message`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "conv-new", messages: [], building_persona: 0 });
+      }),
     );
     renderWithProviders(<ChatEntry />, atProject());
 
@@ -58,6 +121,11 @@ describe("ChatEntry", () => {
         expect.objectContaining({ state: { projectId: "p1" }, replace: true }),
       ),
     );
+    // Nothing gates the chat on a data-source choice: no key is sent, and the
+    // backend defaults the conversation to master. The dataset is changed from
+    // the chat toolbar instead (see DataSourceControl).
+    expect(body).toMatchObject({ flow: "start" });
+    expect(body).not.toHaveProperty("data_source");
   });
 
   it("surfaces a retry affordance when starting the builder fails", async () => {
@@ -67,7 +135,9 @@ describe("ChatEntry", () => {
     // forceNew skips the persona list and goes straight to BuilderEntry.
     renderWithProviders(<ChatEntry />, atProject({ projectId: "p1", forceNew: true }));
 
-    expect(await screen.findByText(/couldn't start the persona builder/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/couldn't start the persona builder/i),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 });

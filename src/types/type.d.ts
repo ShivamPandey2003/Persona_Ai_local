@@ -85,6 +85,51 @@ declare type GroupParticipant = {
     active: boolean;
 }
 
+/**
+ * One assumption applied to a group chat — a statement every persona treats as
+ * true when replying (POST /v1/persona/group-chat/assumptions/*).
+ *
+ * Only applied assumptions exist server-side; suggestions are never stored, so
+ * anything with an `assumption_id` is live. `source` records whether the wording
+ * came from the model or the user, and `reason` is the validator's one-line
+ * explanation.
+ */
+declare type GroupAssumption = {
+    assumption_id: string;
+    text: string;
+    source: "suggested" | "manual";
+    reason: string | null;
+    created_at: string | null;
+}
+
+/**
+ * A proposal from /assumptions/suggest. It has no id because nothing was stored:
+ * `token` is a signature proving the API authored this text, and sending it back
+ * with the text is what applies it without a second validation pass. Held in
+ * component state for as long as it is on screen.
+ */
+declare type AssumptionSuggestion = {
+    text: string;
+    reason: string | null;
+    token: string;
+}
+
+/**
+ * Result of submitting an assumption. A rejection is a successful call with a
+ * negative verdict, so it arrives here rather than as an error: `reason` says
+ * why, and `suggested_assumption` — with its own `suggested_token` — is a valid
+ * replacement the user can apply in one click.
+ */
+declare type AssumptionVerdict =
+    | { status: "approved"; assumption: GroupAssumption }
+    | {
+        status: "rejected";
+        text: string;
+        reason: string;
+        suggested_assumption: string | null;
+        suggested_token: string | null;
+    }
+
 /** A single rendered group-chat message. */
 declare type GroupMessageT = {
     id: string;

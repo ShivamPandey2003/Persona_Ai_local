@@ -33,11 +33,12 @@ import AssumptionsDialog from "./AssumptionsDialog";
 import {
   useGroupHistory,
   useGroupChatParticipants,
+  useGroupAssumptions,
 } from "@/api/GroupChat/query";
+import { useChatList } from "@/api/Chat/query";
 import {
   useGroupBroadcast,
   useGroupMessageSingle,
-  useGroupContext,
   uploadGroupImages,
 } from "@/api/GroupChat/mutation";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
@@ -62,7 +63,9 @@ function GroupChatView() {
   const [input, setInput] = useState("");
   const [target, setTarget] = useState<string>(ALL);
   const [ended, setEnded] = useState(false);
-  const [assumptions, setAssumptions] = useState<string[]>([]);
+  // Set once this group's first user turn is sent — the turn that makes the
+  // backend name the chat. Drives the Recents poll for that name (see below).
+  const [awaitingTitle, setAwaitingTitle] = useState<string | null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   // True while a broadcast's persona replies are being revealed one-by-one.
   const [isRevealing, setIsRevealing] = useState(false);
@@ -73,10 +76,18 @@ function GroupChatView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  // Subscribed purely to rename the Recents entry once the backend has named
+  // this chat: the list is shared cache, so the sidebar renders the new name
+  // without knowing a poll happened.
+  useChatList(projectId, { awaitTitleFor: awaitingTitle ?? undefined });
+
   const participantsQuery = useGroupChatParticipants(groupId);
   const broadcastMut = useGroupBroadcast(groupId ?? "");
   const singleMut = useGroupMessageSingle(groupId ?? "");
-  const contextMut = useGroupContext(groupId ?? "");
+  // Read only: the dialog owns every write. Shared cache key, so applying or
+  // removing an assumption in there refreshes this badge with no extra request.
+  const assumptionsQuery = useGroupAssumptions(groupId);
+  const assumptionCount = assumptionsQuery.data?.assumptions.length ?? 0;
 
   const participants = participantsQuery.data ?? [];
   const sending =
@@ -104,7 +115,7 @@ function GroupChatView() {
     setLiveMessages([]);
     setTarget(ALL);
     setEnded(false);
-    setAssumptions([]);
+    setAwaitingTitle(null);
     setIsRevealing(false);
     setUploading(false);
     attachments.clear();
@@ -220,6 +231,10 @@ function GroupChatView() {
     const text = input.trim();
     if (!text || !groupId || ended || sending) return;
 
+    // The backend names the chat from its first exchange, so only that turn is
+    // worth watching for a rename.
+    const isFirstUserMessage = !messages.some((m) => m.role === "user");
+
     // Take ownership of the staged images so their previews keep rendering in
     // the optimistic bubble.
     const staged = attachments.takeAll();
@@ -244,6 +259,7 @@ function GroupChatView() {
             onSuccess: (data) => {
               revealSequentially(data.responses);
               touchSession(groupId);
+              if (isFirstUserMessage) setAwaitingTitle(groupId);
             },
             onError: handleSendError,
           },
@@ -264,6 +280,7 @@ function GroupChatView() {
                 },
               ]);
               touchSession(groupId);
+              if (isFirstUserMessage) setAwaitingTitle(groupId);
             },
             onError: handleSendError,
           },
@@ -291,20 +308,6 @@ function GroupChatView() {
         toast.error(err?.message || "Couldn't upload images, please retry");
       })
       .finally(() => setUploading(false));
-  };
-
-  const handleSaveAssumptions = (next: string[]) => {
-    if (!groupId) return;
-    contextMut.mutate(
-      { assumptions: next },
-      {
-        onSuccess: () => {
-          setAssumptions(next);
-          setAssumptionsOpen(false);
-          toast.success("Assumptions updated");
-        },
-      },
-    );
   };
 
   const selectedParticipant = participants.find((p) => p.persona_id === target);
@@ -336,9 +339,9 @@ function GroupChatView() {
           >
             <SlidersHorizontal className="mr-1.5 h-4 w-4" />
             Assumptions
-            {assumptions.length > 0 && (
+            {assumptionCount > 0 && (
               <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
-                {assumptions.length}
+                {assumptionCount}
               </span>
             )}
           </Button>
@@ -512,9 +515,7 @@ function GroupChatView() {
       <AssumptionsDialog
         open={assumptionsOpen}
         onOpenChange={setAssumptionsOpen}
-        initial={assumptions}
-        onSave={handleSaveAssumptions}
-        isSaving={contextMut.isPending}
+        groupId={groupId}
       />
     </div>
   );

@@ -150,6 +150,65 @@ describe("useChatList", () => {
   });
 });
 
+describe("useChatList — waiting for a generated title", () => {
+  /** Serve a chat list whose builder row gains a title after `afterCalls` calls. */
+  const titleArrivesAfter = (afterCalls: number) => {
+    let calls = 0;
+    server.use(
+      http.post(`${API_URL}persona/chat-list`, () => {
+        calls += 1;
+        return ok({
+          builder_chats: [
+            {
+              conversation_id: "b1",
+              project_id: "p1",
+              status: "active",
+              // Null until the backend's background naming job finishes.
+              title: calls > afterCalls ? "Low-sugar hydration" : null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:00Z",
+            },
+          ],
+          group_chats: [],
+        });
+      }),
+    );
+    return () => calls;
+  };
+
+  it("picks up the title once the backend writes it, with no reload", async () => {
+    titleArrivesAfter(1);
+    const { Wrapper } = createHookWrapper();
+    const { result } = renderHook(
+      () => useChatList("p1", { awaitTitleFor: "b1" }),
+      { wrapper: Wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // First response has no title yet -> the local/default name stands.
+    expect(result.current.data?.[0].hasServerTitle).toBe(false);
+
+    // The poll picks up the generated one on its own.
+    await waitFor(
+      () => expect(result.current.data?.[0].title).toBe("Low-sugar hydration"),
+      { timeout: 8000 },
+    );
+    expect(result.current.data?.[0].hasServerTitle).toBe(true);
+  }, 15000);
+
+  it("does not poll when no chat is waiting on a title", async () => {
+    const calls = titleArrivesAfter(0);
+    const { Wrapper } = createHookWrapper();
+    const { result } = renderHook(() => useChatList("p1"), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const seen = calls();
+    // A list nobody is waiting on must not put the app on a timer.
+    await new Promise((r) => setTimeout(r, 3200));
+    expect(calls()).toBe(seen);
+  }, 15000);
+});
+
 describe("useBuilderHistory", () => {
   it("flattens each turn into user then assistant bubbles", async () => {
     server.use(

@@ -91,13 +91,29 @@ function DataFileDropzone({ items, onAddFiles, onRemove, disabled }: Props) {
       </div>
 
       {items.length > 0 && (
-        <ScrollArea className="max-h-56 rounded-md border border-border">
+        // The height cap has to sit on the VIEWPORT, not the root: the root has
+        // no definite height, so the viewport's own `size-full` (height: 100%)
+        // resolves to auto and it grows straight past a max-height set here —
+        // which is why the list used to spill over the buttons below it at 4-5
+        // files. `overflow-hidden` on the root keeps the rounded corners
+        // clipping the rows.
+        <ScrollArea
+          className={cn(
+            "overflow-hidden rounded-md border border-border",
+            "[&>[data-slot=scroll-area-viewport]]:max-h-56",
+          )}
+        >
           <ul className="divide-y divide-border">
             {items.map((item) => (
               <li key={item.id} className="flex items-center gap-3 p-3">
                 <FileSpreadsheet className="h-5 w-5 shrink-0 text-emerald-600" />
+                {/* min-w-0 on the flex child, or a long filename refuses to
+                    shrink and pushes the size and remove button out of the row. */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
+                  <p
+                    className="truncate text-sm font-medium text-foreground"
+                    title={item.file.name}
+                  >
                     {item.file.name}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -107,7 +123,7 @@ function DataFileDropzone({ items, onAddFiles, onRemove, disabled }: Props) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-7 w-7 shrink-0"
                   onClick={() => onRemove(item.id)}
                   disabled={disabled}
                   aria-label={`Remove ${item.file.name}`}

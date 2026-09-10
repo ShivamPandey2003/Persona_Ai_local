@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { getAuthToken, postApi } from "@/lib/api";
 import { touchSession, type ChatKind } from "@/lib/chatStore";
 import { queryClient } from "@/provider";
+import type { DataSourceKey } from "@/api/Chat/query";
 
 /* ------------------------------------------------------------------ */
 /* Start a persona-builder conversation                               */
@@ -23,12 +24,15 @@ export type BuilderChatMessageT = {
  *                       background job (else 0). When 1, `job_id` is present.
  *   - job_id          : the persona_query job to poll (see usePersonaBuildJob)
  *                       for the study/evidence results; absent unless building.
+ *   - data_source     : the dataset this conversation builds from, echoed on
+ *                       every turn so the chat can show it without a second call.
  */
 export type BuilderChatTurnResponse = {
   id: string;
   messages: BuilderChatMessageT[];
   building_persona: number;
   job_id?: string | null;
+  data_source?: DataSourceKey;
 };
 
 /**
@@ -37,16 +41,57 @@ export type BuilderChatTurnResponse = {
  * The old /chat/start endpoint was folded into /chat/message. The opening
  * assistant question arrives in `messages`; `building_persona` is 0 on the
  * opening turn.
+ *
+ * `dataSource` is the dataset the user picked and confirmed before the chat
+ * opened. It is pinned to the conversation for the whole build, so it is sent
+ * once, here — omitting it leaves the backend on "master". The backend rejects
+ * a source this project has no processed data for, which is why the picker only
+ * offers the ones it reported as available.
  */
 export const useBuilderChatStart = () => {
   const token = getAuthToken();
-  return useMutation<BuilderChatTurnResponse, Error, { projectId: string }>({
+  return useMutation<
+    BuilderChatTurnResponse,
+    Error,
+    { projectId: string; dataSource?: DataSourceKey }
+  >({
     mutationKey: ["BuilderChatStart"],
-    mutationFn: ({ projectId }) =>
+    mutationFn: ({ projectId, dataSource }) =>
       postApi<BuilderChatTurnResponse>("persona/chat/message", {
         token,
         flow: "start",
         project_id: projectId,
+        ...(dataSource ? { data_source: dataSource } : {}),
+      }),
+  });
+};
+
+/* ------------------------------------------------------------------ */
+/* Change a builder conversation's data source                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * POST /v1/persona/chat/data-source — re-pin the dataset a builder chat will
+ * build from.
+ *
+ * Only needed to CHANGE the choice mid-chat; a chat that picked its dataset at
+ * start already carries it. The backend answers 409 once the build has been
+ * dispatched (the worker already has the key), which `postApi` surfaces as a
+ * toast and a rejected mutation — the caller just keeps the previous value.
+ */
+export const useSetDataSource = (conversationId: string) => {
+  const token = getAuthToken();
+  return useMutation<
+    { conversation_id: string; data_source: DataSourceKey },
+    Error,
+    { dataSource: DataSourceKey }
+  >({
+    mutationKey: ["SetDataSource", conversationId],
+    mutationFn: ({ dataSource }) =>
+      postApi("persona/chat/data-source", {
+        token,
+        conversation_id: conversationId,
+        data_source: dataSource,
       }),
   });
 };

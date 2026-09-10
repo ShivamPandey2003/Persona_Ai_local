@@ -3,7 +3,12 @@ import { screen, waitFor } from "@testing-library/react";
 import { http } from "msw";
 import { renderWithProviders } from "@/test/test-utils";
 import { server } from "@/test/msw/server";
-import { API_URL, ok, envelopeError } from "@/test/msw/handlers";
+import {
+  API_URL,
+  ok,
+  envelopeError,
+  dataSourceOptions,
+} from "@/test/msw/handlers";
 import { authenticate } from "@/test/factories";
 import ConversationPromptInput from "../../../../components/common/Chat/ConversationPromptInput";
 
@@ -35,7 +40,8 @@ describe("ConversationPromptInput", () => {
   it("sends a builder message and shows the optimistic + assistant turns", async () => {
     server.use(
       http.post(`${API_URL}persona/chat/history`, () =>
-        ok({ messages: [], pagination: { total: 0 } }),
+        // data_source_selected unlocks the composer — see the gate tests below.
+        ok({ messages: [], pagination: { total: 0 }, data_source_selected: true }),
       ),
     );
     let body: Record<string, unknown> | null = null;
@@ -63,7 +69,7 @@ describe("ConversationPromptInput", () => {
   it("shows the build progress and ends the chat when personas start building", async () => {
     server.use(
       http.post(`${API_URL}persona/chat/history`, () =>
-        ok({ messages: [], pagination: { total: 0 } }),
+        ok({ messages: [], pagination: { total: 0 }, data_source_selected: true }),
       ),
       http.post(`${API_URL}persona/chat/message`, () =>
         ok({
@@ -139,5 +145,105 @@ describe("ConversationPromptInput", () => {
     const { user, store } = renderWithProviders(<ConversationPromptInput />);
     await user.click(await screen.findByRole("button", { name: /view personas/i }));
     expect(store.getState().Project.personaDialog).toBe(true);
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* Data source must be chosen before any requirements are gathered   */
+  /* ---------------------------------------------------------------- */
+  describe("data-source gate", () => {
+    const unselectedHistory = () =>
+      server.use(
+        http.post(`${API_URL}persona/chat/history`, () =>
+          ok({
+            messages: [{ user_message: null, response: "Welcome." }],
+            pagination: { total: 1 },
+            data_source: "master",
+            data_source_selected: false,
+            data_source_locked: false,
+          }),
+        ),
+      );
+
+    it("locks the composer until a data source is chosen", async () => {
+      unselectedHistory();
+      renderWithProviders(<ConversationPromptInput />);
+
+      const box = await screen.findByPlaceholderText(/select a data source to start/i);
+      expect(box).toBeDisabled();
+      expect(
+        screen.getByText(/choose which data to build these personas from/i),
+      ).toBeInTheDocument();
+    });
+
+    it("does not send a message while the gate is up", async () => {
+      let sent = false;
+      unselectedHistory();
+      server.use(
+        http.post(`${API_URL}persona/chat/message`, () => {
+          sent = true;
+          return ok({ id: "c1", messages: [], building_persona: 0 });
+        }),
+      );
+      const { user } = renderWithProviders(<ConversationPromptInput />);
+
+      const box = await screen.findByPlaceholderText(/select a data source to start/i);
+      await user.type(box, "low sugar drinks{Enter}");
+      expect(sent).toBe(false);
+    });
+
+    it("unlocks the composer once a source is confirmed", async () => {
+      unselectedHistory();
+      server.use(
+        http.post(`${API_URL}persona/chat/data-sources`, () =>
+          ok(dataSourceOptions({ allAvailable: true })),
+        ),
+        http.post(`${API_URL}persona/chat/data-source`, () =>
+          ok({ conversation_id: "c1", data_source: "combined" }),
+        ),
+      );
+      // The picker needs the chat's project to ask which datasets are available;
+      // it comes from the route state, as it does in the app.
+      const { user } = renderWithProviders(<ConversationPromptInput />, {
+        routerEntries: [{ pathname: "/chat/c1", state: { projectId: "p1" } }] as never,
+      });
+
+      // The prompt above the composer opens the same dialog as the toolbar chip.
+      await user.click(
+        await screen.findByRole("button", { name: /^choose data source$/i }),
+      );
+      await user.click(
+        await screen.findByRole("radio", { name: /^master \+ my uploaded data/i }),
+      );
+      await user.click(screen.getByRole("button", { name: /^confirm$/i }));
+
+      expect(
+        await screen.findByPlaceholderText(/describe your target persona/i),
+      ).toBeEnabled();
+      // The chip now reports the chosen dataset instead of asking for one.
+      expect(
+        screen.getByRole("button", { name: /master \+ my uploaded data/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("stays unlocked for a chat that already has a source", async () => {
+      server.use(
+        http.post(`${API_URL}persona/chat/history`, () =>
+          ok({
+            messages: [],
+            pagination: { total: 0 },
+            data_source: "uploaded",
+            data_source_selected: true,
+          }),
+        ),
+      );
+      renderWithProviders(<ConversationPromptInput />);
+
+      expect(
+        await screen.findByPlaceholderText(/describe your target persona/i),
+      ).toBeEnabled();
+      expect(
+        screen.queryByText(/choose which data to build these personas from/i),
+      ).toBeNull();
+    });
   });
 });

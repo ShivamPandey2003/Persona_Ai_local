@@ -1,8 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { getAuthToken, postApi } from "@/lib/api";
 import { upsertSession } from "@/lib/chatStore";
 import { queryClient } from "@/provider";
+import { groupAssumptionsKey, groupSuggestionsKey } from "./query";
 
 /* ------------------------------------------------------------------ */
 /* Start a group chat                                                 */
@@ -194,7 +195,14 @@ export const useGroupMessageSingle = (groupId: string) => {
 /* Shared assumptions / context                                       */
 /* ------------------------------------------------------------------ */
 
-/** POST /v1/persona/group-chat/context — replaces the assumptions list. */
+/**
+ * POST /v1/persona/group-chat/context — replaces the assumptions list wholesale.
+ *
+ * @deprecated Superseded by the assumption hooks below, which validate each
+ * statement, address entries by id, and read the list back from the server.
+ * This one applies whatever it is given with no validation. Kept only for
+ * callers not yet migrated.
+ */
 export const useGroupContext = (groupId: string) => {
   const token = getAuthToken();
   return useMutation<Record<string, never>, Error, { assumptions: string[] }>({
@@ -205,5 +213,97 @@ export const useGroupContext = (groupId: string) => {
         group_id: groupId,
         assumptions,
       }),
+  });
+};
+
+/* ------------------------------------------------------------------ */
+/* Assumptions                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * POST /v1/persona/group-chat/assumptions/suggest — ask the model to propose
+ * assumptions that fit this group's personas.
+ *
+ * Nothing is stored: each proposal carries a `token` proving the API authored
+ * it, and the caller holds the list in component state. Calls are independent —
+ * the server keeps no record of earlier ones, so pressing again may return an
+ * idea already seen.
+ */
+export const useSuggestAssumptions = (groupId: string) => {
+  const token = getAuthToken();
+  // From context, not the module singleton: the cache written here is read back
+  // by `useHeldSuggestions`, so both must be the same client.
+  const cache = useQueryClient();
+  return useMutation<AssumptionSuggestion[], Error, { count?: number } | void>({
+    mutationKey: ["SuggestAssumptions", groupId],
+    mutationFn: async (vars) => {
+      const data = await postApi<{ suggestions: AssumptionSuggestion[] }>(
+        "persona/group-chat/assumptions/suggest",
+        { token, group_id: groupId, count: vars?.count },
+      );
+      return data.suggestions ?? [];
+    },
+    // Each round REPLACES the last: these are this press's ideas, and nothing is
+    // carried forward. Written to the cache rather than returned to component
+    // state so they outlive the dialog being closed and reopened.
+    onSuccess: (fresh) => {
+      cache.setQueryData(groupSuggestionsKey(groupId), fresh);
+    },
+  });
+};
+
+type AddAssumptionArgs = {
+  /** The statement to apply. */
+  text: string;
+  /**
+   * The signature that came with this text when the API authored it — from
+   * /suggest, or as `suggested_token` on a rejection. Omit for text the user
+   * typed; it is then validated like any other input.
+   */
+  suggestionToken?: string | null;
+};
+
+/**
+ * POST /v1/persona/group-chat/assumptions/add.
+ *
+ * Resolves for BOTH verdicts: an applied assumption and a rejected one are both
+ * successful calls (the backend answers 200 either way, because the rejection
+ * reason and its replacement are the useful part). Callers must branch on
+ * `result.status` rather than assuming success means applied.
+ */
+export const useAddAssumption = (groupId: string) => {
+  const token = getAuthToken();
+  return useMutation<AssumptionVerdict, Error, AddAssumptionArgs>({
+    mutationKey: ["AddAssumption", groupId],
+    mutationFn: ({ text, suggestionToken }) =>
+      postApi<AssumptionVerdict>("persona/group-chat/assumptions/add", {
+        token,
+        group_id: groupId,
+        text,
+        suggestion_token: suggestionToken ?? undefined,
+      }),
+    onSuccess: (result) => {
+      // Only an applied assumption changes the stored list.
+      if (result.status === "approved") {
+        queryClient.invalidateQueries({ queryKey: groupAssumptionsKey(groupId) });
+      }
+    },
+  });
+};
+
+/** POST /v1/persona/group-chat/assumptions/remove — stops it shaping replies. */
+export const useRemoveAssumption = (groupId: string) => {
+  const token = getAuthToken();
+  return useMutation<{ assumption_id: string }, Error, { assumptionId: string }>({
+    mutationKey: ["RemoveAssumption", groupId],
+    mutationFn: ({ assumptionId }) =>
+      postApi<{ assumption_id: string }>("persona/group-chat/assumptions/remove", {
+        token,
+        group_id: groupId,
+        assumption_id: assumptionId,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: groupAssumptionsKey(groupId) });
+    },
   });
 };

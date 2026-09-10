@@ -9,6 +9,12 @@ import {
 
 type Props = {
   jobId: string;
+  /**
+   * True when this run was already in flight before the page loaded — the user
+   * closed the tab and came back. Only changes the copy: "still processing"
+   * rather than implying they just started it.
+   */
+  resumed?: boolean;
   /** Fired once when the pipeline finishes successfully. */
   onComplete?: () => void;
   /** Fired once when the pipeline fails. */
@@ -23,7 +29,12 @@ type Props = {
  * files" count), falling back to an indeterminate sweep when steps are absent.
  * Visual twin of the persona-build progress card.
  */
-function DataPipelineProgress({ jobId, onComplete, onError }: Props) {
+function DataPipelineProgress({
+  jobId,
+  resumed = false,
+  onComplete,
+  onError,
+}: Props) {
   const { data, isError } = useDataFilePipelineJob(jobId);
 
   const status = data?.status ?? "running";
@@ -47,8 +58,13 @@ function DataPipelineProgress({ jobId, onComplete, onError }: Props) {
     }
   }, [status, failed, onComplete, onError]);
 
+  const shownPercent = failed ? 100 : Math.min(Math.max(progress, 0), 100);
+
   return (
-    <div className="mx-auto w-full max-w-2xl rounded-xl border bg-card p-5 shadow-sm duration-300 animate-in fade-in slide-in-from-bottom-2">
+    // Fills its container rather than floating: this replaces the dropzone
+    // inside the page's card, so a second bordered card capped narrower than the
+    // panel around it just reads as a small box adrift in a big empty one.
+    <div className="w-full duration-300 animate-in fade-in">
       <div className="flex items-center gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
           <Database className={cn("h-5 w-5", running && "animate-pulse")} />
@@ -59,30 +75,51 @@ function DataPipelineProgress({ jobId, onComplete, onError }: Props) {
               ? "Couldn't process your data"
               : done
                 ? "Data processed"
-                : "Processing your data…"}
+                : resumed
+                  ? "Still processing your data…"
+                  : "Processing your data…"}
           </p>
           <p className="text-xs text-muted-foreground">
             {failed
               ? "Something went wrong while processing the uploaded files."
               : done
                 ? "Your data is ready. Taking you to the persona builder…"
-                : "Analysing your uploaded files — this can take a moment."}
+                : resumed
+                  ? "This run was already going — you can leave this page and come back."
+                  : "Analysing your uploaded files — this can take a moment."}
           </p>
         </div>
-        {running && (
+        {/* The percentage leads, in the same row as the heading, so the number
+            has a home other than the bar itself. */}
+        {hasSteps && !failed && (
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+            {shownPercent}%
+          </span>
+        )}
+        {running && !hasSteps && (
           <Loader2 className="h-5 w-5 shrink-0 animate-spin text-muted-foreground" />
         )}
       </div>
 
       {/* Progress bar: determinate when steps report a percentage, else an
-          indeterminate sweep. Rose + full when failed. */}
-      <div className="relative mt-4 h-1.5 overflow-hidden rounded-full bg-secondary">
+          indeterminate sweep. Rose + full when failed. Full-bleed across the
+          panel — it is the primary thing on this screen while a run is going. */}
+      <div
+        className="relative mt-4 h-2 w-full overflow-hidden rounded-full bg-secondary"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={hasSteps && !failed ? shownPercent : undefined}
+        aria-label="Data processing progress"
+      >
         {failed ? (
           <div className="h-full w-full rounded-full bg-rose-500" />
         ) : hasSteps ? (
           <div
             className="h-full rounded-full bg-foreground transition-all duration-500 ease-out"
-            style={{ width: `${Math.min(Math.max(progress, 4), 100)}%` }}
+            // Floored at 4% so a run that has just started still reads as
+            // started rather than as an empty track.
+            style={{ width: `${Math.max(shownPercent, 4)}%` }}
           />
         ) : (
           <div className="absolute top-0 h-full w-2/5 rounded-full bg-foreground/70 animate-[loader-sweep_1.4s_ease-in-out_infinite]" />
@@ -90,7 +127,7 @@ function DataPipelineProgress({ jobId, onComplete, onError }: Props) {
       </div>
 
       {hasSteps && (
-        <ul className="mt-4 space-y-2.5">
+        <ul className="mt-5 space-y-3 border-t pt-4">
           {steps!.map((step) => (
             <StepRow key={step.key} step={step} jobFailed={failed} />
           ))}

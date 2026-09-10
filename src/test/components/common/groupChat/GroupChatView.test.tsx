@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { http } from "msw";
 import { renderWithProviders } from "@/test/test-utils";
 import { server } from "@/test/msw/server";
@@ -22,6 +22,22 @@ const participants = [
 function seedParticipants() {
   server.use(
     http.post(`${API_URL}persona/group-chat/participants`, () => ok({ participants })),
+  );
+}
+
+function seedNoHistory() {
+  server.use(
+    http.post(`${API_URL}persona/group-chat/history`, () =>
+      ok({ messages: [], pagination: { total: 0 } }),
+    ),
+  );
+}
+
+function seedAssumptions(assumptions: GroupAssumption[]) {
+  server.use(
+    http.post(`${API_URL}persona/group-chat/assumptions/list`, () =>
+      ok({ assumptions, count: assumptions.length, max_allowed: 20 }),
+    ),
   );
 }
 
@@ -100,44 +116,72 @@ describe("GroupChatView", () => {
     expect(await screen.findByText(/couldn't load this group chat/i)).toBeInTheDocument();
   });
 
-  it("opens the shared assumptions dialog", async () => {
+  it("opens the assumptions dialog", async () => {
     seedParticipants();
-    server.use(
-      http.post(`${API_URL}persona/group-chat/history`, () =>
-        ok({ messages: [], pagination: { total: 0 } }),
-      ),
-    );
+    seedNoHistory();
+    seedAssumptions([]);
     const { user } = renderWithProviders(<GroupChatView />);
     await user.click(await screen.findByRole("button", { name: /assumptions/i }));
-    expect(await screen.findByText("Shared assumptions")).toBeInTheDocument();
+    expect(await screen.findByText(/no assumptions yet/i)).toBeInTheDocument();
   });
 
-  it("saves shared assumptions to the group context", async () => {
+  it("badges the header with the number of applied assumptions", async () => {
     seedParticipants();
-    server.use(
-      http.post(`${API_URL}persona/group-chat/history`, () =>
-        ok({ messages: [], pagination: { total: 0 } }),
-      ),
-    );
+    seedNoHistory();
+    seedAssumptions([
+      {
+        assumption_id: "a1",
+        text: "Product costs $34.99",
+        source: "manual",
+        reason: null,
+        created_at: null,
+      },
+      {
+        assumption_id: "a2",
+        text: "Sold only online",
+        source: "manual",
+        reason: null,
+        created_at: null,
+      },
+    ]);
+
+    renderWithProviders(<GroupChatView />);
+    const button = await screen.findByRole("button", { name: /assumptions/i });
+    await waitFor(() => expect(within(button).getByText("2")).toBeInTheDocument());
+  });
+
+  it("adds a typed assumption through the dialog", async () => {
+    seedParticipants();
+    seedNoHistory();
+    seedAssumptions([]);
     let body: Record<string, unknown> | null = null;
     server.use(
-      http.post(`${API_URL}persona/group-chat/context`, async ({ request }) => {
+      http.post(`${API_URL}persona/group-chat/assumptions/add`, async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return ok({});
+        return ok({
+          status: "approved",
+          assumption: {
+            assumption_id: "a1",
+            text: "Budget conscious shoppers",
+            source: "manual",
+                reason: "Fits these personas.",
+            created_at: null,
+          },
+        });
       }),
     );
 
     const { user } = renderWithProviders(<GroupChatView />);
     await user.click(await screen.findByRole("button", { name: /assumptions/i }));
-    await screen.findByText("Shared assumptions");
+    await screen.findByText(/no assumptions yet/i);
 
-    await user.type(
-      screen.getByPlaceholderText(/natural electrolytes/i),
-      "Budget conscious",
-    );
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.type(screen.getByLabelText("New assumption"), "Budget conscious shoppers");
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
 
     await waitFor(() => expect(body).not.toBeNull());
-    expect(body).toMatchObject({ group_id: "g1", assumptions: ["Budget conscious"] });
+    expect(body).toMatchObject({
+      group_id: "g1",
+      text: "Budget conscious shoppers",
+    });
   });
 });

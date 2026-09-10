@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * unusable here.
  */
 export const ALLOWED_DATA_EXTENSIONS = ["xlsx", "sav"] as const;
-export const MAX_DATA_FILES = 5;
+export const MAX_DATA_FILES = 10;
 export const MAX_DATA_FILE_BYTES = 50 * 1024 * 1024; // 200 MB
 /** `accept` attribute for the file input (extension-based). */
 export const DATA_FILE_ACCEPT = ".xlsx,.sav";

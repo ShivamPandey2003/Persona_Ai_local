@@ -14,6 +14,7 @@ const chat: RecentChat = {
   to: "/chat/b1",
   projectId: "p1",
   title: "Persona chat",
+  hasServerTitle: true,
   status: "active",
   createdAt: 1,
   updatedAt: 1,
