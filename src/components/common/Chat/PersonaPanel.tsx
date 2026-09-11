@@ -4,6 +4,7 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronDown,
+  Filter,
   Info,
   LayoutGrid,
   List,
@@ -25,8 +26,20 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import EmptyState from "@/components/common/EmptyState";
 import PersonaEvidence, { COVERAGE_HOVER_TEXT } from "./PersonaEvidence";
+import DataSourceBadge, {
+  DATA_SOURCE_KEYS,
+  DATA_SOURCE_META,
+} from "./DataSourceBadge";
 
 import {
   usePersonaList,
@@ -35,6 +48,7 @@ import {
 } from "@/api/Persona/query";
 import { usePersonaUpdate } from "@/api/Persona/mutation";
 import { useStartGroupChat } from "@/api/GroupChat/mutation";
+import type { DataSourceKey } from "@/api/Chat/query";
 import { useCountUp } from "@/hooks/useCountUp";
 import { personaInitials } from "@/lib/personaColors";
 import { cn } from "@/lib/utils";
@@ -194,6 +208,10 @@ function PersonaPanel({
   const [columns, setColumns] = useState(3);
   // Dashboard layout: rich "grid" cards or a compact "list" for scanning many.
   const [view, setView] = useState<"grid" | "list">("list");
+  // Which dataset's personas to show; "all" shows every persona.
+  const [sourceFilter, setSourceFilter] = useState<"all" | DataSourceKey>(
+    "all",
+  );
   // List view: which rows have their evidence panel expanded (by persona id).
   const [openEvidence, setOpenEvidence] = useState<Record<string, boolean>>({});
   const toggleEvidence = (id: string) =>
@@ -207,7 +225,7 @@ function PersonaPanel({
   // matches the dashboard sequence. Personas without an index (non-builder) keep
   // their original order after the indexed ones. Copy first — never sort the
   // TanStack Query cache array in place.
-  const personas = useMemo(() => {
+  const allPersonas = useMemo(() => {
     const list = personasQuery.data?.personas ?? [];
     return [...list].sort(
       (a, b) =>
@@ -216,6 +234,29 @@ function PersonaPanel({
     );
   }, [personasQuery.data?.personas]);
   const summary = dashboardQuery.data?.summary;
+
+  // Personas per dataset, for the filter's counts.
+  const sourceCounts = useMemo(() => {
+    const counts: Record<DataSourceKey, number> = {
+      master: 0,
+      uploaded: 0,
+      combined: 0,
+    };
+    for (const p of allPersonas) counts[p.data_source ?? "master"] += 1;
+    return counts;
+  }, [allPersonas]);
+
+  // What the dashboard renders. Selection, select-all and group chat all work
+  // on this list, so a hidden persona is never silently part of a group chat.
+  const personas = useMemo(
+    () =>
+      sourceFilter === "all"
+        ? allPersonas
+        : allPersonas.filter(
+            (p) => (p.data_source ?? "master") === sourceFilter,
+          ),
+    [allPersonas, sourceFilter],
+  );
 
   // run_query output (study breakdown + evidence) keyed by persona_id, merged
   // onto each list card below.
@@ -244,7 +285,13 @@ function PersonaPanel({
     setPendingId(null);
     setExpandedRows({});
     setOpenEvidence({});
+    setSourceFilter("all");
   }, [projectId]);
+
+  // Rows are keyed by index, which shifts when the filter changes.
+  useEffect(() => {
+    setExpandedRows({});
+  }, [sourceFilter]);
 
   const selectedPersonas = useMemo(
     () => personas.filter((p) => selected[p.persona_id]),
@@ -306,7 +353,7 @@ function PersonaPanel({
         <SummaryCard
           icon={<CheckCircle2 className="h-5 w-5 text-emerald-700" />}
           iconBg="bg-emerald-100"
-          value={summary?.personas_created ?? personas.length}
+          value={summary?.personas_created ?? allPersonas.length}
           label="Personas Created"
         />
         <SummaryCard
@@ -327,37 +374,91 @@ function PersonaPanel({
         <p className="text-sm font-medium text-foreground">
           Personas{personas.length > 0 ? ` · ${personas.length}` : ""}
         </p>
-        <div className="inline-flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5">
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            aria-pressed={view === "list"}
-            aria-label="List view"
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              view === "list"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
+        <div className="flex items-center gap-2">
+          <Select
+            value={sourceFilter}
+            onValueChange={(v) => setSourceFilter(v as "all" | DataSourceKey)}
           >
-            <List className="h-3.5 w-3.5" />
-            List
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("grid")}
-            aria-pressed={view === "grid"}
-            aria-label="Grid view"
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              view === "grid"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-            Grid
-          </button>
+            <SelectTrigger
+              size="sm"
+              className="text-xs"
+              aria-label="Filter personas by data source"
+            >
+              <SelectValue>
+                {sourceFilter === "all" ? (
+                  <>
+                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                    All sources
+                  </>
+                ) : (
+                  (() => {
+                    const Icon = DATA_SOURCE_META[sourceFilter].icon;
+                    return (
+                      <>
+                        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                        {DATA_SOURCE_META[sourceFilter].short}
+                      </>
+                    );
+                  })()
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectItem value="all" className="text-xs">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                All sources
+                <span className="ml-auto tabular-nums text-muted-foreground">
+                  {allPersonas.length}
+                </span>
+              </SelectItem>
+              <SelectSeparator />
+              {DATA_SOURCE_KEYS.map((key) => {
+                const meta = DATA_SOURCE_META[key];
+                const Icon = meta.icon;
+                return (
+                  <SelectItem key={key} value={key} className="text-xs">
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    {meta.label}
+                    <span className="ml-auto pl-3 tabular-nums text-muted-foreground">
+                      {sourceCounts[key]}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          <div className="inline-flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => setView("list")}
+              aria-pressed={view === "list"}
+              aria-label="List view"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                view === "list"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <List className="h-3.5 w-3.5" />
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("grid")}
+              aria-pressed={view === "grid"}
+              aria-label="Grid view"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                view === "grid"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Grid
+            </button>
+          </div>
         </div>
       </div>
 
@@ -391,12 +492,32 @@ function PersonaPanel({
               ))}
             </div>
           )
-        ) : personas.length === 0 ? (
+        ) : allPersonas.length === 0 ? (
           <EmptyState
             className="h-[400px] justify-center"
             icon={<Users className="h-6 w-6" />}
             title="No personas yet"
             description="Use the persona-builder chat to create personas first."
+          />
+        ) : personas.length === 0 ? (
+          <EmptyState
+            className="h-[400px] justify-center"
+            icon={<Filter className="h-6 w-6" />}
+            title="No personas from this source"
+            description={
+              sourceFilter === "all"
+                ? undefined
+                : `None of this project's personas were built from ${DATA_SOURCE_META[sourceFilter].label}.`
+            }
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSourceFilter("all")}
+              >
+                Show all personas
+              </Button>
+            }
           />
         ) : view === "list" ? (
           <div className="flex flex-col gap-2.5 p-1">
@@ -484,7 +605,8 @@ function PersonaPanel({
                           </button>
                         </div>
                       )}
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        <DataSourceBadge source={persona.data_source} />
                         <span className="capitalize">{persona.status}</span>
                         {dash && dash.unique_studies > 0 && (
                           <>
@@ -680,9 +802,10 @@ function PersonaPanel({
                               </button>
                             </div>
                           )}
-                          <p className="mt-0.5 text-xs capitalize text-muted-foreground">
-                            {persona.status}
-                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <DataSourceBadge source={persona.data_source} />
+                            <span className="capitalize">{persona.status}</span>
+                          </div>
                         </div>
                       </div>
                       <Checkbox

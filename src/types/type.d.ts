@@ -75,6 +75,8 @@ declare type PersonaListItem = {
     theme_ids?: string[] | null;
     profile_ids?: string[] | null;
     demographics?: PersonaDemographics | null;
+    // Dataset the persona was built from (master when built before this existed).
+    data_source?: import("@/api/Chat/query").DataSourceKey | null;
 }
 
 /** A participant of a group chat (POST /v1/persona/group-chat/participants). */

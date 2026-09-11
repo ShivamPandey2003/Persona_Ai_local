@@ -1,14 +1,8 @@
-import { Check, Database, Layers, Loader2, Upload } from "lucide-react";
+import { Check, Database, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { DataSourceKey, DataSourceOption } from "@/api/Chat/query";
-
-/** Icon per dataset, so the three rows are distinguishable at a glance. */
-const ICONS: Record<DataSourceKey, typeof Database> = {
-  master: Database,
-  uploaded: Upload,
-  combined: Layers,
-};
+import { DATA_SOURCE_META } from "./DataSourceBadge";
 
 type Props = {
   options: DataSourceOption[];
@@ -52,9 +46,13 @@ function DataSourceOptionList({
   }
 
   return (
-    <div role="radiogroup" aria-label="Data source" className="flex flex-col gap-2">
+    <div
+      role="radiogroup"
+      aria-label="Data source"
+      className="flex flex-col gap-2"
+    >
       {options.map((option) => {
-        const Icon = ICONS[option.key] ?? Database;
+        const Icon = DATA_SOURCE_META[option.key]?.icon ?? Database;
         const selected = value === option.key;
         const locked = disabled || !option.available;
 
@@ -86,7 +84,10 @@ function DataSourceOptionList({
               <span className="flex items-center gap-2">
                 <span className="text-sm font-medium">{option.label}</span>
                 {selected && (
-                  <Check className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  <Check
+                    className="h-3.5 w-3.5 text-primary"
+                    aria-hidden="true"
+                  />
                 )}
               </span>
               <span className="mt-0.5 block text-xs text-muted-foreground">

@@ -56,6 +56,34 @@ describe("PersonaPanel", () => {
     expect(screen.getByText("Data Files")).toBeInTheDocument();
   });
 
+  it("labels each persona with its data source and filters by it", async () => {
+    // Radix Select opens on pointer events jsdom does not implement.
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    seedPersonas([
+      makePersona({ data_source: "master" }),
+      makePersona({ persona_id: "pb", persona_name: "Beta", data_source: "uploaded" }),
+      makePersona({ persona_id: "pc", persona_name: "Gamma", data_source: "combined" }),
+    ]);
+    const { user } = renderWithProviders(<PersonaPanel projectId="p1" />);
+
+    await screen.findByText("Alpha");
+    expect(screen.getByLabelText("Built from Master data")).toBeInTheDocument();
+    expect(screen.getByLabelText("Built from My uploaded data")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Built from Master + my uploaded data"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Filter personas by data source" }),
+    );
+    await user.click(await screen.findByRole("option", { name: /My uploaded data/ }));
+
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gamma")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no personas", async () => {
     seedPersonas([]);
     renderWithProviders(<PersonaPanel projectId="p1" />);
