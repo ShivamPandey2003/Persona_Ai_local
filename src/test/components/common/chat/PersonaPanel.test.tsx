@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { http } from "msw";
 import { renderWithProviders } from "@/test/test-utils";
 import { server } from "@/test/msw/server";
@@ -33,10 +33,10 @@ const summary = {
   unique_respondents: 0,
 };
 
-function seedPersonas(personas: unknown[]) {
+function seedPersonas(personas: unknown[], dashboardPersonas: unknown[] = []) {
   server.use(
     http.post(`${API_URL}persona/list`, () => ok({ personas })),
-    http.post(`${API_URL}persona/dashboard`, () => ok({ summary, personas: [] })),
+    http.post(`${API_URL}persona/dashboard`, () => ok({ summary, personas: dashboardPersonas })),
   );
 }
 
@@ -127,6 +127,63 @@ describe("PersonaPanel", () => {
 
     await waitFor(() => expect(body).not.toBeNull());
     expect(body).toMatchObject({ flow: "start", persona_ids: ["pa", "pb"] });
+  });
+
+  it("blocks selecting or chatting with an insufficient-data persona", async () => {
+    seedPersonas(
+      [makePersona(), makePersona({ persona_id: "pb", persona_name: "Beta" })],
+      [
+        {
+          persona_id: "pa",
+          persona_name: "Alpha",
+          insufficient_data: true,
+          study_summary: [],
+          evidence_by_category: [],
+          unique_studies: 0,
+          unique_respondents: 2,
+        },
+        {
+          persona_id: "pb",
+          persona_name: "Beta",
+          insufficient_data: false,
+          study_summary: [],
+          evidence_by_category: [],
+          unique_studies: 1,
+          unique_respondents: 50,
+        },
+      ],
+    );
+    let groupChatCalled = false;
+    server.use(
+      http.post(`${API_URL}persona/group-chat/message`, () => {
+        groupChatCalled = true;
+        return ok({ group_id: "g1", message: "ok" });
+      }),
+    );
+    const { user } = renderWithProviders(<PersonaPanel projectId="p1" />);
+    await screen.findByText("Alpha");
+
+    // "ready" is misleading on a persona that isn't usable yet — hidden for it,
+    // still shown for one with enough data.
+    expect(screen.queryByText("ready")).toBeInTheDocument();
+    const alphaRow = screen.getByText("Alpha").closest(".rounded-xl") as HTMLElement;
+    expect(within(alphaRow).queryByText("ready")).not.toBeInTheDocument();
+
+    const alphaCheckbox = screen.getByRole("checkbox", { name: "Select Alpha" });
+    const betaCheckbox = screen.getByRole("checkbox", { name: "Select Beta" });
+    expect(alphaCheckbox).toBeDisabled();
+    expect(betaCheckbox).not.toBeDisabled();
+
+    const chatButtons = screen.getAllByRole("button", { name: "Chat" });
+    expect(chatButtons[0]).toBeDisabled(); // Alpha's
+    expect(chatButtons[1]).not.toBeDisabled(); // Beta's
+    await user.click(chatButtons[0]);
+    expect(groupChatCalled).toBe(false);
+
+    // "Select all" only picks up the persona with enough data.
+    await user.click(screen.getByRole("checkbox", { name: "Select all personas" }));
+    expect(alphaCheckbox).not.toBeChecked();
+    expect(betaCheckbox).toBeChecked();
   });
 
   it("renames a persona inline", async () => {

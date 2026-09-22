@@ -3,7 +3,7 @@ import { http, HttpResponse } from "msw";
 import { toast } from "sonner";
 import { server } from "@/test/msw/server";
 import { API_URL } from "@/test/msw/handlers";
-import { apiRequest } from "../../services/apiService";
+import { apiRequest, isAbortError } from "../../services/apiService";
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
@@ -85,6 +85,97 @@ describe("apiRequest", () => {
 
     await apiRequest("post", "issue", {});
     expect(localStorage.getItem("token")).toBe("fresh-token");
+  });
+
+  it("does not toast when silent", async () => {
+    server.use(
+      http.post(endpoint("quiet"), () =>
+        HttpResponse.json({ header: { code: 502, message: "Provider down" } }),
+      ),
+      http.post(endpoint("quiet-down"), () => HttpResponse.error()),
+    );
+
+    await expect(apiRequest("post", "quiet", {}, "json", { silent: true })).rejects.toThrow(
+      "Provider down",
+    );
+    await expect(
+      apiRequest("post", "quiet-down", {}, "json", { silent: true }),
+    ).rejects.toThrow(/network error/i);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("rejects a cancelled request with an AbortError and no toast", async () => {
+    server.use(
+      http.post(endpoint("slow"), async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return HttpResponse.json({ header: { code: 200 }, response: {} });
+      }),
+    );
+    const controller = new AbortController();
+    const request = apiRequest("post", "slow", {}, "json", { signal: controller.signal });
+    controller.abort();
+
+    const error = await request.catch((e) => e);
+    expect(isAbortError(error)).toBe(true);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  describe("blob responses", () => {
+    it("returns the binary body and headers", async () => {
+      server.use(
+        http.post(endpoint("audio"), () =>
+          new HttpResponse(new Uint8Array([1, 2, 3]), {
+            headers: { "content-type": "audio/wav", "x-src": "p1" },
+          }),
+        ),
+      );
+
+      const res = await apiRequest("post", "audio", {}, "blob");
+      expect(res.response).toBeInstanceOf(Blob);
+      expect((res.response as Blob).size).toBe(3);
+      expect(res.headers["x-src"]).toBe("p1");
+    });
+
+    it("treats a JSON envelope as an error", async () => {
+      server.use(
+        http.post(endpoint("audio-error"), () =>
+          HttpResponse.json({ header: { code: 503, message: "Text to speech is busy" } }),
+        ),
+      );
+
+      await expect(apiRequest("post", "audio-error", {}, "blob")).rejects.toThrow(
+        "Text to speech is busy",
+      );
+      expect(toast.error).toHaveBeenCalledWith("Text to speech is busy");
+    });
+
+    it("falls back to a generic message for an unreadable JSON body", async () => {
+      server.use(
+        http.post(endpoint("audio-garbled"), () =>
+          new HttpResponse("{not json", { headers: { "content-type": "application/json" } }),
+        ),
+      );
+
+      await expect(
+        apiRequest("post", "audio-garbled", {}, "blob", { silent: true }),
+      ).rejects.toThrow(/something went wrong on our end/i);
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("ends the session on a 401 envelope even when silent", async () => {
+      localStorage.setItem("token", "stale");
+      server.use(
+        http.post(endpoint("audio-expired"), () =>
+          HttpResponse.json({ header: { code: 401, message: "Session expired" } }),
+        ),
+      );
+
+      await expect(
+        apiRequest("post", "audio-expired", {}, "blob", { silent: true }),
+      ).rejects.toThrow("Session expired");
+      expect(toast.error).toHaveBeenCalledWith("Session expired");
+      expect(localStorage.getItem("token")).toBeNull();
+    });
   });
 
   describe("on a 401 envelope", () => {

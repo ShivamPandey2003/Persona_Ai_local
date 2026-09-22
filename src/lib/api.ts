@@ -1,4 +1,4 @@
-import { apiRequest } from "@/services/apiService";
+import { apiRequest, type ApiRequestOptions } from "@/services/apiService";
 import { toast } from "sonner";
 import { getApiErrorMessage, getNetworkErrorMessage } from "@/lib/apiError";
 
@@ -41,11 +41,12 @@ export type ApiEnvelope<T> = {
 export async function postApi<T>(
   url: string,
   body: Record<string, unknown>,
+  options?: ApiRequestOptions,
 ): Promise<T> {
   // `apiRequest` already surfaces a toast and throws for non-success envelopes
   // and transport errors; the checks below are a defensive fallback in case a
   // caller reaches here with an unexpected shape.
-  const res = await apiRequest("post", url, body);
+  const res = await apiRequest("post", url, body, "json", options);
 
   if (!res || !res.response) {
     throw new Error(getNetworkErrorMessage());
@@ -61,7 +62,7 @@ export async function postApi<T>(
       localStorage.clear();
       sessionStorage.clear();
       window.location.href = "/";
-    } else {
+    } else if (!options?.silent) {
       toast.error(getApiErrorMessage(code, message));
     }
     throw new Error(getApiErrorMessage(code, message));

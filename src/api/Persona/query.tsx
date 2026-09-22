@@ -57,6 +57,9 @@ export type DashboardPersona = {
   unique_respondents: number;
   study_summary: StudySummaryRow[];
   evidence_by_category: EvidenceCategory[];
+  /** True when this persona matched fewer respondents than the configured
+   * minimum (see persona_service.persona_dashboard) — too little data to chat with. */
+  insufficient_data: boolean;
 };
 
 type PersonaDashboardResponse = {

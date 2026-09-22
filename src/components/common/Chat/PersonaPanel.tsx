@@ -53,6 +53,8 @@ import { useCountUp } from "@/hooks/useCountUp";
 import { personaInitials } from "@/lib/personaColors";
 import { cn } from "@/lib/utils";
 
+const INSUFFICIENT_DATA_TOOLTIP = "This persona doesn't have sufficient respondent data.";
+
 const confidenceColors: Record<string, string> = {
   High: "bg-emerald-100 text-emerald-800 border-emerald-200",
   "Med-High": "bg-sky-100 text-sky-800 border-sky-200",
@@ -293,26 +295,39 @@ function PersonaPanel({
     setExpandedRows({});
   }, [sourceFilter]);
 
+  // A persona that matched too few respondents can't be chatted with — never
+  // selectable, never part of "select all", never a valid chat target, even if
+  // a disabled control were somehow bypassed (checked again in startChat below).
+  const isInsufficientData = (personaId: string) =>
+    Boolean(evidenceByPersona.get(personaId)?.insufficient_data);
+
   const selectedPersonas = useMemo(
     () => personas.filter((p) => selected[p.persona_id]),
     [personas, selected],
   );
 
+  const selectablePersonas = useMemo(
+    () => personas.filter((p) => !isInsufficientData(p.persona_id)),
+    [personas, evidenceByPersona],
+  );
+
   const allSelected =
-    personas.length > 0 && selectedPersonas.length === personas.length;
+    selectablePersonas.length > 0 &&
+    selectedPersonas.length === selectablePersonas.length;
 
   const toggleSelectAll = () => {
     if (allSelected) {
       setSelected({});
     } else {
       setSelected(
-        Object.fromEntries(personas.map((p) => [p.persona_id, true])),
+        Object.fromEntries(selectablePersonas.map((p) => [p.persona_id, true])),
       );
     }
   };
 
   const startChat = (personaIds: string[], title: string, marker: string) => {
     if (!projectId || personaIds.length === 0 || startGroup.isPending) return;
+    if (personaIds.some((id) => isInsufficientData(id))) return;
     setPendingId(marker);
     startGroup.mutate(
       { projectId, personaIds, title },
@@ -323,8 +338,10 @@ function PersonaPanel({
     );
   };
 
-  const toggle = (personaId: string) =>
+  const toggle = (personaId: string) => {
+    if (isInsufficientData(personaId)) return;
     setSelected((prev) => ({ ...prev, [personaId]: !prev[personaId] }));
+  };
 
   // Inline persona rename.
   const updatePersona = usePersonaUpdate(projectId);
@@ -525,6 +542,7 @@ function PersonaPanel({
               const isSelected = Boolean(selected[persona.persona_id]);
               const isPending = pendingId === persona.persona_id;
               const dash = evidenceByPersona.get(persona.persona_id);
+              const isInsufficient = Boolean(dash?.insufficient_data);
               const coverage = dash?.final_coverage;
               const hasCoverage = typeof coverage === "number" && coverage > 0;
               const dashHasEvidence = Boolean(
@@ -542,12 +560,24 @@ function PersonaPanel({
                   )}
                 >
                   <div className="flex items-center gap-3 p-3">
-                    <Checkbox
-                      className="border border-gray-200 shadow"
-                      checked={isSelected}
-                      onCheckedChange={() => toggle(persona.persona_id)}
-                      aria-label={`Select ${persona.persona_name ?? "persona"}`}
-                    />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={isInsufficient ? "cursor-not-allowed" : undefined}>
+                          <Checkbox
+                            className="border border-gray-200 shadow"
+                            checked={isSelected}
+                            disabled={isInsufficient}
+                            onCheckedChange={() => toggle(persona.persona_id)}
+                            aria-label={`Select ${persona.persona_name ?? "persona"}`}
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      {isInsufficient && (
+                        <TooltipContent className="max-w-xs text-left leading-relaxed">
+                          {INSUFFICIENT_DATA_TOOLTIP}
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                       {personaInitials(persona.persona_name)}
                     </div>
@@ -607,7 +637,9 @@ function PersonaPanel({
                       )}
                       <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                         <DataSourceBadge source={persona.data_source} />
-                        <span className="capitalize">{persona.status}</span>
+                        {!isInsufficient && (
+                          <span className="capitalize">{persona.status}</span>
+                        )}
                         {dash && dash.unique_studies > 0 && (
                           <>
                             <span aria-hidden>·</span>
@@ -686,26 +718,37 @@ function PersonaPanel({
                         />
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      disabled={startGroup.isPending}
-                      onClick={() =>
-                        startChat(
-                          [persona.persona_id],
-                          persona.persona_name ?? "Persona",
-                          persona.persona_id,
-                        )
-                      }
-                    >
-                      {isPending ? (
-                        <CircularLoader size="sm" />
-                      ) : (
-                        <MessageSquare className="mr-2 h-4 w-4" />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={cn("shrink-0", isInsufficient && "cursor-not-allowed")}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            disabled={isInsufficient || startGroup.isPending}
+                            onClick={() =>
+                              startChat(
+                                [persona.persona_id],
+                                persona.persona_name ?? "Persona",
+                                persona.persona_id,
+                              )
+                            }
+                          >
+                            {isPending ? (
+                              <CircularLoader size="sm" />
+                            ) : (
+                              <MessageSquare className="mr-2 h-4 w-4" />
+                            )}
+                            Chat
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {isInsufficient && (
+                        <TooltipContent className="max-w-xs text-left leading-relaxed">
+                          {INSUFFICIENT_DATA_TOOLTIP}
+                        </TooltipContent>
                       )}
-                      Chat
-                    </Button>
+                    </Tooltip>
                   </div>
                   {isEvidenceOpen && dashHasEvidence && (
                     <div className="border-t p-3 duration-200 animate-in fade-in slide-in-from-top-1">
@@ -729,6 +772,7 @@ function PersonaPanel({
               const rowIndex = Math.floor(index / columns);
               const isExpanded = Boolean(expandedRows[rowIndex]);
               const dash = evidenceByPersona.get(persona.persona_id);
+              const isInsufficient = Boolean(dash?.insufficient_data);
               return (
                 <Card
                   key={persona.persona_id}
@@ -804,16 +848,30 @@ function PersonaPanel({
                           )}
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <DataSourceBadge source={persona.data_source} />
-                            <span className="capitalize">{persona.status}</span>
+                            {!isInsufficient && (
+                              <span className="capitalize">{persona.status}</span>
+                            )}
                           </div>
                         </div>
                       </div>
-                      <Checkbox
-                        className="border border-gray-200 shadow"
-                        checked={isSelected}
-                        onCheckedChange={() => toggle(persona.persona_id)}
-                        aria-label={`Select ${persona.persona_name ?? "persona"}`}
-                      />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className={isInsufficient ? "cursor-not-allowed" : undefined}>
+                            <Checkbox
+                              className="border border-gray-200 shadow"
+                              checked={isSelected}
+                              disabled={isInsufficient}
+                              onCheckedChange={() => toggle(persona.persona_id)}
+                              aria-label={`Select ${persona.persona_name ?? "persona"}`}
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        {isInsufficient && (
+                          <TooltipContent className="max-w-xs text-left leading-relaxed">
+                            {INSUFFICIENT_DATA_TOOLTIP}
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
                     </div>
 
                     {!isBuilderPersona(persona) &&
@@ -868,26 +926,37 @@ function PersonaPanel({
                     ) : null}
 
                     <div className="mt-auto pt-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        disabled={startGroup.isPending}
-                        onClick={() =>
-                          startChat(
-                            [persona.persona_id],
-                            persona.persona_name ?? "Persona",
-                            persona.persona_id,
-                          )
-                        }
-                      >
-                        {isPending ? (
-                          <CircularLoader size="sm" />
-                        ) : (
-                          <MessageSquare className="mr-2 h-4 w-4" />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className={cn("block", isInsufficient && "cursor-not-allowed")}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              disabled={isInsufficient || startGroup.isPending}
+                              onClick={() =>
+                                startChat(
+                                  [persona.persona_id],
+                                  persona.persona_name ?? "Persona",
+                                  persona.persona_id,
+                                )
+                              }
+                            >
+                              {isPending ? (
+                                <CircularLoader size="sm" />
+                              ) : (
+                                <MessageSquare className="mr-2 h-4 w-4" />
+                              )}
+                              Chat
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        {isInsufficient && (
+                          <TooltipContent className="max-w-xs text-left leading-relaxed">
+                            {INSUFFICIENT_DATA_TOOLTIP}
+                          </TooltipContent>
                         )}
-                        Chat
-                      </Button>
+                      </Tooltip>
                     </div>
                   </CardContent>
                 </Card>

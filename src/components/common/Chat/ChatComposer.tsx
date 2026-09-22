@@ -6,6 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CircularLoader } from "@/components/ui/loader";
 import { ArrowUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type ChatComposerProps = {
   value: string;
@@ -26,6 +27,17 @@ type ChatComposerProps = {
   leftSlot?: React.ReactNode;
   /** Optional content rendered above the textarea (e.g. an attachment preview strip). */
   attachmentBar?: React.ReactNode;
+  /**
+   * Locks typing and sending while leaving the action row usable (e.g. while
+   * the mic is recording, so its stop button still works).
+   */
+  inputLocked?: boolean;
+  /**
+   * Optional live status shown in place of the textarea (e.g. voice
+   * recording). The textarea stays mounted underneath, so its text and height
+   * are kept.
+   */
+  statusBar?: React.ReactNode;
   /** Ref to the composer's root element (used to focus the textarea, e.g. when editing a message). */
   rootRef?: React.Ref<HTMLDivElement>;
 };
@@ -44,9 +56,12 @@ function ChatComposer({
   placeholder = "Ask anything",
   leftSlot,
   attachmentBar,
+  inputLocked = false,
+  statusBar,
   rootRef,
 }: ChatComposerProps) {
-  const canSend = Boolean(value.trim()) && !disabled && !isSending;
+  const canSend =
+    Boolean(value.trim()) && !disabled && !isSending && !inputLocked;
 
   const handleSubmit = () => {
     if (!canSend) return;
@@ -72,11 +87,24 @@ function ChatComposer({
               {attachmentBar}
             </div>
           )}
-          <PromptInputTextarea
-            placeholder={disabled ? disabledPlaceholder : placeholder}
-            disabled={disabled}
-            className="min-h-[44px] pt-3 pl-4 text-base leading-[1.3] sm:text-base md:text-base"
-          />
+          <div className="relative">
+            <PromptInputTextarea
+              placeholder={disabled ? disabledPlaceholder : placeholder}
+              disabled={disabled || inputLocked}
+              className={cn(
+                "min-h-[44px] pt-3 pl-4 text-base leading-[1.3] sm:text-base md:text-base",
+                statusBar && "invisible",
+              )}
+            />
+            {statusBar && (
+              <div
+                className="absolute inset-x-0 top-0 h-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {statusBar}
+              </div>
+            )}
+          </div>
 
           <PromptInputActions className="mt-3 flex w-full items-center justify-between gap-2 p-2">
             {/* Stop the click from reaching PromptInput's focus-the-textarea

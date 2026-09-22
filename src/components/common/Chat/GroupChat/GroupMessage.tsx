@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { Check, Copy, Info, Pencil } from "lucide-react";
+import { Check, Copy, Info, Loader2, Pencil, Square, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
 import { useTypewriter } from "@/hooks/useTypewriter";
+import { useSpeechStatus } from "@/hooks/useSpeechStatus";
 import { personaColorStyle, personaInitials } from "@/lib/personaColors";
 import {
   Tooltip,
@@ -55,11 +56,95 @@ type GroupMessageProps = {
   onEdit?: (text: string) => void;
   /** Typewriter-reveal this message (a freshly received persona reply). */
   animate?: boolean;
+  /**
+   * When provided (persona replies only), shows a Play/Stop action that reads
+   * the reply aloud. Keep it referentially stable so memoization holds.
+   */
+  onSpeak?: (message: GroupMessageT) => void;
 };
+
+/**
+ * A persona's avatar circle — swaps its initials for a mini equalizer (or a
+ * spinner while audio is still loading) while their reply is being read
+ * aloud, so it's obvious who's talking without hovering anything. Subscribes
+ * only to this message's speech status, so it never re-renders the rest of
+ * the message (same isolation as SpeakAction below).
+ */
+function PersonaAvatar({
+  messageId,
+  initials,
+  avatarClass,
+}: {
+  messageId: string;
+  initials: string;
+  avatarClass: string;
+}) {
+  const status = useSpeechStatus(messageId);
+
+  return (
+    <div
+      className={cn(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-shadow duration-200",
+        avatarClass,
+        status === "playing" && "ring-2 ring-current ring-offset-2 ring-offset-background",
+      )}
+    >
+      {status === "loading" ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Preparing audio" />
+      ) : status === "playing" ? (
+        <span className="flex h-3 items-end gap-0.5" role="status" aria-label="Speaking">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="h-full w-0.5 animate-[wave-bars_1s_ease-in-out_infinite] rounded-full bg-current"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            />
+          ))}
+        </span>
+      ) : (
+        initials
+      )}
+    </div>
+  );
+}
+
+/** Play/Stop for one reply; subscribes only to this message's speech status. */
+function SpeakAction({
+  message,
+  onSpeak,
+}: {
+  message: GroupMessageT;
+  onSpeak: (message: GroupMessageT) => void;
+}) {
+  const status = useSpeechStatus(message.id);
+  const label =
+    status === "playing" ? "Stop reading" : status === "loading" ? "Stop loading audio" : "Read aloud";
+
+  return (
+    <MessageAction tooltip={label} delayDuration={100}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="rounded-full"
+        aria-label={label}
+        aria-pressed={status !== "idle"}
+        onClick={() => onSpeak(message)}
+      >
+        {status === "loading" ? (
+          <Loader2 className="animate-spin" />
+        ) : status === "playing" ? (
+          <Square className="fill-current" />
+        ) : (
+          <Volume2 />
+        )}
+      </Button>
+    </MessageAction>
+  );
+}
 
 /** Renders one group-chat turn: a right-aligned user bubble or a labelled persona reply. */
 const GroupMessage = memo(
-  ({ message, color, onEdit, animate }: GroupMessageProps) => {
+  ({ message, color, onEdit, animate, onSpeak }: GroupMessageProps) => {
     const isUser = message.role === "user";
     const [copied, setCopied] = useState(false);
     const shown = useTypewriter(message.message, Boolean(animate) && !isUser);
@@ -137,14 +222,11 @@ const GroupMessage = memo(
 
     return (
       <Message className="group mx-auto flex w-full max-w-3xl flex-row items-start gap-3 px-2 duration-300 animate-in fade-in slide-in-from-left-2 md:px-10">
-        <div
-          className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-            style.avatar,
-          )}
-        >
-          {personaInitials(message.persona_name ?? "?")}
-        </div>
+        <PersonaAvatar
+          messageId={message.id}
+          initials={personaInitials(message.persona_name ?? "?")}
+          avatarClass={style.avatar}
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-1 items-start">
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn("text-xs font-semibold", style.text)}>
@@ -198,8 +280,11 @@ const GroupMessage = memo(
               </span>
             </div>
           )}
-          <MessageActions className="-ml-2.5 flex opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          <MessageActions className="-ml-2.5 flex opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 has-[[aria-pressed=true]]:opacity-100">
             {copyAction}
+            {onSpeak && message.message.trim() && (
+              <SpeakAction message={message} onSpeak={onSpeak} />
+            )}
           </MessageActions>
         </div>
       </Message>

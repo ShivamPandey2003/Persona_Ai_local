@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import { ImagePlus, SlidersHorizontal, Users, X } from "lucide-react";
+import {
+  ImagePlus,
+  Loader2,
+  Mic,
+  SlidersHorizontal,
+  Square,
+  Users,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import type { StickToBottomContext } from "use-stick-to-bottom";
 
 import {
@@ -26,6 +36,7 @@ import ChatComposer from "../ChatComposer";
 import ChatEnded from "../ChatEnded";
 import ChatHistorySkeleton from "../ChatHistorySkeleton";
 import ChatScrollButton from "../ChatScrollButton";
+import VoiceStatusBar from "../VoiceStatusBar";
 import GroupMessage from "./GroupMessage";
 import GroupParticipants from "./GroupParticipants";
 import AssumptionsDialog from "./AssumptionsDialog";
@@ -49,8 +60,23 @@ import {
   MAX_IMAGES,
 } from "@/hooks/useImageAttachments";
 import { touchSession } from "@/lib/chatStore";
+import { useVoiceConfig } from "@/api/Voice/voice";
+import { useMicRecorder } from "@/hooks/useMicRecorder";
+import { useSpeakerPreference } from "@/hooks/useSpeakerPreference";
+import { speechPlayer } from "@/lib/voice/speechPlayer";
 
 const ALL = "all";
+
+// Per-message "read aloud" button hidden for now — flip to true to bring it back.
+const PER_MESSAGE_SPEAKER_BUTTON_ENABLED = false;
+
+type PersonaReply = {
+  persona_name: string;
+  response: string;
+  evidence_tags?: string[];
+  confidence_level?: string | null;
+  confidence_score?: number | null;
+};
 
 function GroupChatView() {
   const { groupId } = useParams();
@@ -93,6 +119,27 @@ function GroupChatView() {
   const sending =
     broadcastMut.isPending || singleMut.isPending || isRevealing || uploading;
 
+  // Replies can land after the user has moved to another group chat (the view
+  // is reused across routes); they must not be shown or spoken there.
+  const groupIdRef = useRef(groupId);
+  useEffect(() => {
+    groupIdRef.current = groupId;
+  }, [groupId]);
+
+  // ---- Voice ----
+  const voiceConfig = useVoiceConfig().data;
+  const sttEnabled = Boolean(voiceConfig?.stt.enabled);
+  const ttsEnabled = Boolean(voiceConfig?.tts.enabled);
+  // The backend owns the recording limit; the hook has a fallback until it loads.
+  const maxRecordingSeconds = voiceConfig?.limits?.max_recording_seconds;
+  const [readAloudPref, setReadAloudPref] = useSpeakerPreference();
+  const readAloud = ttsEnabled && readAloudPref;
+  // Read inside reveal timers, which outlive the render that scheduled them.
+  const readAloudRef = useRef(readAloud);
+  useEffect(() => {
+    readAloudRef.current = readAloud;
+  }, [readAloud]);
+
   const messages = useMemo(
     () => [...history.messages, ...liveMessages],
     [history.messages, liveMessages],
@@ -110,6 +157,29 @@ function GroupChatView() {
     return map;
   }, [participants]);
 
+  // Edit: load a previous message's text back into the composer, then focus the
+  // textarea (caret at the end) so it can be tweaked and re-sent.
+  const composerRef = useRef<HTMLDivElement>(null);
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      const textarea = composerRef.current?.querySelector("textarea");
+      if (textarea) {
+        textarea.focus();
+        const end = textarea.value.length;
+        textarea.setSelectionRange(end, end);
+      }
+    });
+  }, []);
+
+  // Dictation lands in the input for review — it's never sent automatically.
+  const mic = useMicRecorder({
+    maxDurationMs: maxRecordingSeconds ? maxRecordingSeconds * 1000 : undefined,
+    onTranscript: (text) => {
+      setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${text}` : text));
+      focusComposer();
+    },
+  });
+
   // Reset when navigating between group chats.
   useEffect(() => {
     setLiveMessages([]);
@@ -120,16 +190,57 @@ function GroupChatView() {
     setUploading(false);
     attachments.clear();
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    // attachments.clear is stable; intentionally keyed on groupId only.
+    speechPlayer.stop();
+    mic.cancel();
+    // attachments.clear and mic.cancel are stable; intentionally keyed on groupId only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
 
 
-  // Clear any pending reveal timer on unmount.
+  // Clear any pending reveal timer and stop reading aloud on unmount.
   useEffect(
     () => () => {
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      speechPlayer.stop();
     },
+    [],
+  );
+
+  // The browser refused to play without a fresh click: turn auto-read off so
+  // it doesn't keep failing; the user can switch it back on.
+  useEffect(
+    () => speechPlayer.onAutoplayBlocked(() => setReadAloudPref(false)),
+    [setReadAloudPref],
+  );
+
+  const handleToggleReadAloud = () => {
+    if (readAloudPref) {
+      speechPlayer.stop();
+      setReadAloudPref(false);
+    } else {
+      // Inside the click, so replies arriving later are allowed to play.
+      speechPlayer.prime();
+      setReadAloudPref(true);
+    }
+  };
+
+  // While the mic is busy the rest of the bar is locked, so nothing else can
+  // change under a dictation that is about to land in the input.
+  const micBusy = mic.status !== "idle";
+
+  const handleMicClick = () => {
+    if (mic.status === "idle") speechPlayer.stop(); // don't read replies into the mic
+    mic.toggle();
+  };
+
+  const handleSpeak = useCallback(
+    (message: GroupMessageT) =>
+      speechPlayer.toggle({
+        id: message.id,
+        text: message.message,
+        speakerKey: message.persona_name,
+        groupId: groupIdRef.current,
+      }),
     [],
   );
 
@@ -148,20 +259,13 @@ function GroupChatView() {
     signal: history.messages.length,
   });
 
-  // Edit: load a previous message's text back into the composer, then focus the
-  // textarea (caret at the end) so it can be tweaked and re-sent.
-  const composerRef = useRef<HTMLDivElement>(null);
-  const handleEditMessage = useCallback((text: string) => {
-    setInput(text);
-    requestAnimationFrame(() => {
-      const textarea = composerRef.current?.querySelector("textarea");
-      if (textarea) {
-        textarea.focus();
-        const end = textarea.value.length;
-        textarea.setSelectionRange(end, end);
-      }
-    });
-  }, []);
+  const handleEditMessage = useCallback(
+    (text: string) => {
+      setInput(text);
+      focusComposer();
+    },
+    [focusComposer],
+  );
 
   const appendLive = (next: GroupMessageT[]) =>
     setLiveMessages((prev) => [...prev, ...next]);
@@ -186,31 +290,47 @@ function GroupChatView() {
    * after roughly that reply's typing duration, so it feels like a real
    * back-and-forth rather than a wall of simultaneous answers.
    */
-  const revealSequentially = (
-    responses: Array<{
-      persona_name: string;
-      response: string;
-      evidence_tags?: string[];
-      confidence_level?: string | null;
-      confidence_score?: number | null;
-    }>,
-  ) => {
+  // Only reached for replies to the chat still on screen (stale ones are
+  // dropped first), so the ref is the group the reply belongs to.
+  const speakIfReadingAloud = (message: GroupMessageT) => {
+    if (!readAloudRef.current) return;
+    speechPlayer.enqueue({
+      id: message.id,
+      text: message.message,
+      speakerKey: message.persona_name,
+      groupId: groupIdRef.current,
+    });
+  };
+
+  const revealSequentially = (responses: PersonaReply[]) => {
     if (responses.length === 0) return;
+    const replies: GroupMessageT[] = responses.map((r) => ({
+      id: crypto.randomUUID(),
+      role: "persona",
+      persona_name: r.persona_name,
+      message: r.response,
+      evidence_tags: r.evidence_tags,
+      confidence_level: r.confidence_level,
+      confidence_score: r.confidence_score,
+    }));
+    // Synthesize ahead so each reply can be heard as soon as its bubble appears.
+    if (readAloudRef.current) {
+      replies.forEach((m) =>
+        speechPlayer.prefetch({
+          text: m.message,
+          speakerKey: m.persona_name,
+          groupId: groupIdRef.current,
+        }),
+      );
+    }
     setIsRevealing(true);
     let i = 0;
     const step = () => {
+      const reply = replies[i];
+      appendLive([reply]);
+      // Queued as it's revealed, so audio never runs ahead of the text.
+      speakIfReadingAloud(reply);
       const r = responses[i];
-      appendLive([
-        {
-          id: crypto.randomUUID(),
-          role: "persona",
-          persona_name: r.persona_name,
-          message: r.response,
-          evidence_tags: r.evidence_tags,
-          confidence_level: r.confidence_level,
-          confidence_score: r.confidence_score,
-        },
-      ]);
       i += 1;
       if (i < responses.length) {
         const words = (r.response.match(/\S+\s*/g) ?? []).length;
@@ -229,11 +349,16 @@ function GroupChatView() {
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text || !groupId || ended || sending) return;
+    if (!text || !groupId || ended || sending || micBusy) return;
 
     // The backend names the chat from its first exchange, so only that turn is
     // worth watching for a rename.
     const isFirstUserMessage = !messages.some((m) => m.role === "user");
+
+    // A new question interrupts whatever is still being read aloud.
+    speechPlayer.stop();
+    const sentGroupId = groupId;
+    const isCurrentGroup = () => groupIdRef.current === sentGroupId;
 
     // Take ownership of the staged images so their previews keep rendering in
     // the optimistic bubble.
@@ -257,11 +382,14 @@ function GroupChatView() {
           { message: text, fileIds },
           {
             onSuccess: (data) => {
+              touchSession(sentGroupId);
+              if (!isCurrentGroup()) return;
               revealSequentially(data.responses);
-              touchSession(groupId);
-              if (isFirstUserMessage) setAwaitingTitle(groupId);
+              if (isFirstUserMessage) setAwaitingTitle(sentGroupId);
             },
-            onError: handleSendError,
+            onError: (err) => {
+              if (isCurrentGroup()) handleSendError(err);
+            },
           },
         );
       } else {
@@ -269,20 +397,23 @@ function GroupChatView() {
           { personaId: target, message: text, fileIds },
           {
             onSuccess: (data) => {
-              appendLive([
-                {
-                  id: crypto.randomUUID(),
-                  role: "persona",
-                  persona_name: data.response.persona_name,
-                  message: data.response.message,
-                  confidence_level: data.response.confidence_level,
-                  confidence_score: data.response.confidence_score,
-                },
-              ]);
-              touchSession(groupId);
-              if (isFirstUserMessage) setAwaitingTitle(groupId);
+              touchSession(sentGroupId);
+              if (!isCurrentGroup()) return;
+              const reply: GroupMessageT = {
+                id: crypto.randomUUID(),
+                role: "persona",
+                persona_name: data.response.persona_name,
+                message: data.response.message,
+                confidence_level: data.response.confidence_level,
+                confidence_score: data.response.confidence_score,
+              };
+              appendLive([reply]);
+              speakIfReadingAloud(reply);
+              if (isFirstUserMessage) setAwaitingTitle(sentGroupId);
             },
-            onError: handleSendError,
+            onError: (err) => {
+              if (isCurrentGroup()) handleSendError(err);
+            },
           },
         );
       }
@@ -300,8 +431,11 @@ function GroupChatView() {
       groupId,
       staged.map((s) => s.file),
     )
-      .then((fileIds) => sendToServer(fileIds))
+      .then((fileIds) => {
+        if (isCurrentGroup()) sendToServer(fileIds);
+      })
       .catch((err: Error) => {
+        if (!isCurrentGroup()) return;
         removeLive(userMsgId);
         setInput(text);
         attachments.restore(staged);
@@ -314,7 +448,7 @@ function GroupChatView() {
   const targetName =
     target === ALL ? "Everyone" : selectedParticipant?.persona_name;
   const canAttach =
-    !ended && !sending && attachments.items.length < MAX_IMAGES;
+    !ended && !sending && !micBusy && attachments.items.length < MAX_IMAGES;
 
   if (participantsQuery.isError || history.isError) {
     return (
@@ -335,6 +469,7 @@ function GroupChatView() {
           <Button
             variant="outline"
             size="sm"
+            disabled={micBusy}
             onClick={() => setAssumptionsOpen(true)}
           >
             <SlidersHorizontal className="mr-1.5 h-4 w-4" />
@@ -376,8 +511,9 @@ function GroupChatView() {
                     ? colorByName[message.persona_name]
                     : undefined
                 }
-                onEdit={ended ? undefined : handleEditMessage}
+                onEdit={ended || micBusy ? undefined : handleEditMessage}
                 animate={liveIds.has(message.id)}
+                onSpeak={PER_MESSAGE_SPEAKER_BUTTON_ENABLED && ttsEnabled ? handleSpeak : undefined}
               />
             ))
           )}
@@ -397,6 +533,17 @@ function GroupChatView() {
         onSubmit={handleSend}
         disabled={ended}
         isSending={sending}
+        inputLocked={micBusy}
+        statusBar={
+          sttEnabled && micBusy ? (
+            <VoiceStatusBar
+              status={mic.status}
+              stream={mic.stream}
+              maxDurationMs={mic.maxDurationMs}
+              onDiscard={mic.cancel}
+            />
+          ) : undefined
+        }
         placeholder={
           target === ALL
             ? "Message everyone…"
@@ -447,7 +594,58 @@ function GroupChatView() {
             >
               <ImagePlus size={18} />
             </Button>
-            <Select value={target} onValueChange={setTarget} disabled={ended}>
+            {sttEnabled && mic.supported && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "relative size-9 shrink-0 rounded-full",
+                  mic.status === "recording" &&
+                    "bg-destructive/10 text-destructive ring-2 ring-destructive/30 hover:bg-destructive/15 hover:text-destructive",
+                )}
+                disabled={
+                  ended || mic.status === "requesting" || mic.status === "transcribing"
+                }
+                onClick={handleMicClick}
+                aria-label={
+                  mic.status === "recording"
+                    ? "Stop recording"
+                    : mic.status === "transcribing"
+                      ? "Transcribing"
+                      : "Record voice message"
+                }
+                aria-pressed={mic.status === "recording"}
+                title={mic.status === "recording" ? "Stop recording" : "Record voice message"}
+              >
+                {mic.status === "transcribing" || mic.status === "requesting" ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : mic.status === "recording" ? (
+                  <Square size={14} className="animate-pulse fill-current" />
+                ) : (
+                  <Mic size={18} />
+                )}
+              </Button>
+            )}
+            {ttsEnabled && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "size-9 shrink-0 rounded-full",
+                  readAloudPref && "text-primary",
+                )}
+                disabled={micBusy}
+                onClick={handleToggleReadAloud}
+                aria-label={readAloudPref ? "Stop reading replies aloud" : "Read replies aloud"}
+                aria-pressed={readAloudPref}
+                title={readAloudPref ? "Reading replies aloud" : "Read replies aloud"}
+              >
+                {readAloudPref ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </Button>
+            )}
+            <Select value={target} onValueChange={setTarget} disabled={ended || micBusy}>
             <SelectTrigger
               size="sm"
               aria-label="Choose who to message"
