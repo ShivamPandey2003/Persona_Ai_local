@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getAuthToken, postApi } from "@/lib/api";
+import { apiRequest } from "@/services/apiService";
 
 /* ------------------------------------------------------------------ */
 /* Required-format schema (synthetic example shown on the upload page) */
@@ -33,7 +34,8 @@ export const useDataFileSchema = () => {
   const token = getAuthToken();
   return useQuery<DataFileSchema>({
     queryKey: ["DataFileSchema"],
-    queryFn: () => postApi<DataFileSchema>("projects/files/data/schema", { token }),
+    queryFn: () =>
+      postApi<DataFileSchema>("projects/files/data/schema", { token }),
     enabled: Boolean(token),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -46,9 +48,7 @@ export const useDataFileSchema = () => {
 
 /** Why the data-upload step is closed for a project. */
 export type UploadLockedReason =
-  | "chat_started"
-  | "personas_built"
-  | "data_processed";
+  "chat_started" | "personas_built" | "data_processed";
 
 export type ProjectDataState = {
   project_id: string;
@@ -209,7 +209,12 @@ export type DataPipelineStep = {
 };
 
 export type DataPipelineJobResult = {
-  files?: { file_id: string; file_name: string; ok: boolean; reason?: string | null }[];
+  files?: {
+    file_id: string;
+    file_name: string;
+    ok: boolean;
+    reason?: string | null;
+  }[];
   error?: string;
   failed?: number;
 };
@@ -246,9 +251,84 @@ export const useDataFilePipelineJob = (jobId: string | null | undefined) => {
     enabled: Boolean(token && jobId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === "done" || status === "failed" ? false : JOB_POLL_INTERVAL_MS;
+      return status === "done" || status === "failed"
+        ? false
+        : JOB_POLL_INTERVAL_MS;
     },
     refetchOnWindowFocus: false,
     gcTime: 0,
   });
 };
+
+/* ------------------------------------------------------------------ */
+/* Uploaded files of a project (persona dashboard "Data Files" tile)  */
+/* ------------------------------------------------------------------ */
+
+/** One active file row of a project, as listed by /files/list. */
+export type ProjectDataFile = {
+  file_id: string;
+  file_name: string;
+  /** uploaded | processing | processed | failed */
+  status: string;
+  rows: number | null;
+  /** ISO timestamp of the upload; null for legacy rows. */
+  created_at: string | null;
+};
+
+/**
+ * POST /v1/projects/files/list — the project's active uploaded files. Pass
+ * `enabled: false` to defer the request until the list is actually shown.
+ */
+export const useProjectDataFiles = (
+  projectId: string | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) => {
+  const token = getAuthToken();
+  return useQuery<{ files: ProjectDataFile[] }>({
+    queryKey: ["ProjectDataFiles", projectId],
+    queryFn: () =>
+      postApi<{ files: ProjectDataFile[] }>("projects/files/list", {
+        token,
+        project_id: projectId,
+      }),
+    enabled: Boolean(token && projectId && enabled),
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+};
+
+/**
+ * POST /v1/projects/files/data/download — fetch the original file bytes and hand
+ * them to the browser as a download named `fileName`. Failures are toasted by
+ * apiRequest and rethrown.
+ */
+export async function downloadDataFile({
+  projectId,
+  fileId,
+  fileName,
+}: {
+  projectId: string;
+  fileId: string;
+  fileName: string;
+}): Promise<void> {
+  const res = await apiRequest(
+    "post",
+    "projects/files/data/download",
+    { token: getAuthToken(), project_id: projectId, file_id: fileId },
+    "blob",
+    { timeoutMs: 120_000 },
+  );
+  const blob = res?.response;
+  if (!(blob instanceof Blob)) {
+    throw new Error("Couldn't download this file.");
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Revoke on the next tick so the browser has started the download.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}

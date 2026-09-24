@@ -9,6 +9,7 @@ import PersonaPanel from "./PersonaPanel";
 import { usePersonaList } from "@/api/Persona/query";
 import { useProjectDataState } from "@/api/Projects/dataFiles";
 import { useBuilderChatStart } from "@/api/Chat/mutation";
+import { useChatList, type RecentChat } from "@/api/Chat/query";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { findActiveBuilderSession, upsertSession } from "@/lib/chatStore";
 import { queryClient } from "@/provider";
@@ -25,9 +26,15 @@ function CenteredLoader({ text }: { text: string }) {
 function BuilderEntry({
   projectId,
   forceNew,
+  serverActiveChat,
 }: {
   projectId: string;
   forceNew: boolean;
+  /**
+   * The project's most recent non-ended builder chat per the server. Covers
+   * what the local store can't: a new login, a cleared browser, another device.
+   */
+  serverActiveChat?: RecentChat;
 }) {
   const navigate = useNavigate();
   const startMut = useBuilderChatStart();
@@ -43,6 +50,17 @@ function BuilderEntry({
       const existing = findActiveBuilderSession(projectId);
       if (existing) {
         navigate(`/chat/${existing.id}`, { state: { projectId }, replace: true });
+        return;
+      }
+      if (serverActiveChat) {
+        // Re-index it locally so a hard refresh can still recover its project.
+        upsertSession({
+          id: serverActiveChat.id,
+          kind: "builder",
+          projectId,
+          title: serverActiveChat.title,
+        });
+        navigate(serverActiveChat.to, { state: { projectId }, replace: true });
         return;
       }
     }
@@ -115,6 +133,8 @@ function ChatEntry() {
 
   const dataState = useProjectDataState(wantsChat ? undefined : projectId);
   const personasQuery = usePersonaList(forceNew ? undefined : projectId);
+  // Shares the sidebar's ["ChatList", projectId] cache, so usually no extra request.
+  const chatListQuery = useChatList(forceNew ? undefined : projectId);
 
   if (!projectId) {
     return (
@@ -154,7 +174,23 @@ function ChatEntry() {
   const personas = personasQuery.data?.personas ?? [];
 
   if (personas.length === 0) {
-    return <BuilderEntry key={projectId} projectId={projectId} forceNew={false} />;
+    // Wait for the chat list before mounting BuilderEntry — it creates a chat as
+    // soon as it mounts. A failed lookup falls through to a new chat, as before.
+    if (chatListQuery.isLoading) {
+      return <CenteredLoader text="Loading project…" />;
+    }
+    // The list is ordered most-recent activity first.
+    const serverActiveChat = chatListQuery.data?.find(
+      (c) => c.kind === "builder" && c.status?.toLowerCase() !== "ended",
+    );
+    return (
+      <BuilderEntry
+        key={projectId}
+        projectId={projectId}
+        forceNew={false}
+        serverActiveChat={serverActiveChat}
+      />
+    );
   }
 
   return (

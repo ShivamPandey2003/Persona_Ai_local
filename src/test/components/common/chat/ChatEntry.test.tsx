@@ -128,6 +128,77 @@ describe("ChatEntry", () => {
     expect(body).not.toHaveProperty("data_source");
   });
 
+  it("reopens the server's active builder chat instead of starting a new one", async () => {
+    // Nothing in the local chat store (fresh login / other device) — the
+    // server's chat list is what knows the chat is still active.
+    let chatCreated = false;
+    const builderChat = (id: string, status: string, updated_at: string) => ({
+      conversation_id: id,
+      project_id: "p1",
+      status,
+      title: null,
+      created_at: "2026-09-01T10:00:00",
+      updated_at,
+    });
+    server.use(
+      http.post(`${API_URL}persona/list`, () => ok({ personas: [] })),
+      http.post(`${API_URL}persona/chat-list`, () =>
+        ok({
+          builder_chats: [
+            builderChat("conv-ended", "ended", "2026-09-03T10:00:00"),
+            builderChat("conv-active", "active", "2026-09-02T10:00:00"),
+          ],
+          group_chats: [],
+        }),
+      ),
+      http.post(`${API_URL}persona/chat/message`, () => {
+        chatCreated = true;
+        return ok({ id: "conv-new", messages: [], building_persona: 0 });
+      }),
+    );
+    renderWithProviders(<ChatEntry />, atProject());
+
+    await waitFor(() =>
+      expect(navigateSpy).toHaveBeenCalledWith(
+        "/chat/conv-active",
+        expect.objectContaining({ state: { projectId: "p1" }, replace: true }),
+      ),
+    );
+    expect(chatCreated).toBe(false);
+  });
+
+  it("starts a new chat when every server builder chat has ended", async () => {
+    server.use(
+      http.post(`${API_URL}persona/list`, () => ok({ personas: [] })),
+      http.post(`${API_URL}persona/chat-list`, () =>
+        ok({
+          builder_chats: [
+            {
+              conversation_id: "conv-ended",
+              project_id: "p1",
+              status: "ended",
+              title: null,
+              created_at: "2026-09-01T10:00:00",
+              updated_at: "2026-09-01T10:00:00",
+            },
+          ],
+          group_chats: [],
+        }),
+      ),
+      http.post(`${API_URL}persona/chat/message`, () =>
+        ok({ id: "conv-new", messages: [], building_persona: 0 }),
+      ),
+    );
+    renderWithProviders(<ChatEntry />, atProject());
+
+    await waitFor(() =>
+      expect(navigateSpy).toHaveBeenCalledWith(
+        "/chat/conv-new",
+        expect.objectContaining({ replace: true }),
+      ),
+    );
+  });
+
   it("surfaces a retry affordance when starting the builder fails", async () => {
     server.use(
       http.post(`${API_URL}persona/chat/message`, () => envelopeError(500, "error")),

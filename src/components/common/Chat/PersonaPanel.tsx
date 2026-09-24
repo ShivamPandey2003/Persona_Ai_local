@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import EmptyState from "@/components/common/EmptyState";
 import PersonaEvidence, { COVERAGE_HOVER_TEXT } from "./PersonaEvidence";
+import ProjectDataFilesList from "./ProjectDataFilesList";
 import DataSourceBadge, {
   DATA_SOURCE_KEYS,
   DATA_SOURCE_META,
@@ -53,7 +54,17 @@ import { useCountUp } from "@/hooks/useCountUp";
 import { personaInitials } from "@/lib/personaColors";
 import { cn } from "@/lib/utils";
 
-const INSUFFICIENT_DATA_TOOLTIP = "This persona doesn't have sufficient respondent data.";
+const INSUFFICIENT_DATA_TOOLTIP =
+  "This persona doesn't have sufficient respondent data.";
+
+/** Shown in place of the status so a non-selectable persona says why at a glance. */
+function InsufficientDataBadge() {
+  return (
+    <span className="font-medium text-red-600" title={INSUFFICIENT_DATA_TOOLTIP}>
+      Insufficient data
+    </span>
+  );
+}
 
 const confidenceColors: Record<string, string> = {
   High: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -100,33 +111,50 @@ function SummaryCard({
   value,
   label,
   iconBg,
+  active,
+  onClick,
 }: {
   icon: React.ReactNode;
   value: number;
   label: string;
   iconBg: string;
+  /** This tile's view is the one shown below. */
+  active: boolean;
+  onClick: () => void;
 }) {
   const display = useCountUp(value);
   return (
-    <Card className="h-fit transition-shadow duration-200 hover:shadow-md">
-      <CardContent className="flex items-center gap-3">
-        <div
-          className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-lg",
-            iconBg,
-          )}
-        >
-          {icon}
-        </div>
-        <div>
-          {/* Number ticks up to its value (count-up animation). */}
-          <p className="text-2xl font-semibold tabular-nums text-foreground">
-            {display}
-          </p>
-          <p className="text-xs text-muted-foreground">{label}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className="h-fit rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Card
+        className={cn(
+          "h-fit cursor-pointer transition-shadow duration-200 hover:shadow-md",
+          active && "ring-2 ring-primary",
+        )}
+      >
+        <CardContent className="flex items-center gap-3">
+          <div
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-lg",
+              iconBg,
+            )}
+          >
+            {icon}
+          </div>
+          <div>
+            {/* Number ticks up to its value (count-up animation). */}
+            <p className="text-2xl font-semibold tabular-nums text-foreground">
+              {display}
+            </p>
+            <p className="text-xs text-muted-foreground">{label}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </button>
   );
 }
 
@@ -179,6 +207,9 @@ function PersonaListRowSkeleton() {
   );
 }
 
+/** What the panel body shows — chosen by clicking one of the summary tiles. */
+type PanelView = "personas" | "insufficient" | "files";
+
 type PersonaPanelProps = {
   projectId: string | undefined;
   /** Called after a chat is successfully started (e.g. to close a dialog). */
@@ -214,6 +245,9 @@ function PersonaPanel({
   const [sourceFilter, setSourceFilter] = useState<"all" | DataSourceKey>(
     "all",
   );
+  // Which summary tile is selected: all personas, only the insufficient-data
+  // ones, or the project's uploaded data files.
+  const [panelView, setPanelView] = useState<PanelView>("personas");
   // List view: which rows have their evidence panel expanded (by persona id).
   const [openEvidence, setOpenEvidence] = useState<Record<string, boolean>>({});
   const toggleEvidence = (id: string) =>
@@ -248,18 +282,6 @@ function PersonaPanel({
     return counts;
   }, [allPersonas]);
 
-  // What the dashboard renders. Selection, select-all and group chat all work
-  // on this list, so a hidden persona is never silently part of a group chat.
-  const personas = useMemo(
-    () =>
-      sourceFilter === "all"
-        ? allPersonas
-        : allPersonas.filter(
-            (p) => (p.data_source ?? "master") === sourceFilter,
-          ),
-    [allPersonas, sourceFilter],
-  );
-
   // run_query output (study breakdown + evidence) keyed by persona_id, merged
   // onto each list card below.
   const evidenceByPersona = useMemo(() => {
@@ -269,6 +291,21 @@ function PersonaPanel({
     }
     return map;
   }, [dashboardQuery.data?.personas]);
+
+  // What the dashboard renders. Selection, select-all and group chat all work
+  // on this list, so a hidden persona is never silently part of a group chat.
+  // The "Insufficient Data" tile narrows it to the personas that fell short.
+  const personas = useMemo(
+    () =>
+      allPersonas.filter(
+        (p) =>
+          (sourceFilter === "all" ||
+            (p.data_source ?? "master") === sourceFilter) &&
+          (panelView !== "insufficient" ||
+            Boolean(evidenceByPersona.get(p.persona_id)?.insufficient_data)),
+      ),
+    [allPersonas, sourceFilter, panelView, evidenceByPersona],
+  );
 
   // Track the grid's column count (1 below the md breakpoint, 3 at/above it) so
   // personas can be grouped into rows and a whole row expanded together.
@@ -288,12 +325,13 @@ function PersonaPanel({
     setExpandedRows({});
     setOpenEvidence({});
     setSourceFilter("all");
+    setPanelView("personas");
   }, [projectId]);
 
   // Rows are keyed by index, which shifts when the filter changes.
   useEffect(() => {
     setExpandedRows({});
-  }, [sourceFilter]);
+  }, [sourceFilter, panelView]);
 
   // A persona that matched too few respondents can't be chatted with — never
   // selectable, never part of "select all", never a valid chat target, even if
@@ -372,427 +410,260 @@ function PersonaPanel({
           iconBg="bg-emerald-100"
           value={summary?.personas_created ?? allPersonas.length}
           label="Personas Created"
+          active={panelView === "personas"}
+          onClick={() => setPanelView("personas")}
         />
         <SummaryCard
           icon={<XCircle className="h-5 w-5 text-red-700" />}
           iconBg="bg-red-100"
           value={summary?.insufficient_data ?? 0}
           label="Insufficient Data"
+          active={panelView === "insufficient"}
+          onClick={() => setPanelView("insufficient")}
         />
         <SummaryCard
           icon={<BarChart3 className="h-5 w-5 text-foreground" />}
           iconBg="bg-secondary"
           value={summary?.data_files ?? 0}
           label="Data Files"
+          active={panelView === "files"}
+          onClick={() => setPanelView("files")}
         />
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-1">
-        <p className="text-sm font-medium text-foreground">
-          Personas{personas.length > 0 ? ` · ${personas.length}` : ""}
-        </p>
-        <div className="flex items-center gap-2">
-          <Select
-            value={sourceFilter}
-            onValueChange={(v) => setSourceFilter(v as "all" | DataSourceKey)}
-          >
-            <SelectTrigger
-              size="sm"
-              className="text-xs"
-              aria-label="Filter personas by data source"
-            >
-              <SelectValue>
-                {sourceFilter === "all" ? (
-                  <>
+      {panelView === "files" ? (
+        <>
+          <div className="flex items-center justify-between gap-2 px-1">
+            <p className="text-sm font-medium text-foreground">
+              Data files
+              {summary?.data_files ? ` · ${summary.data_files}` : ""}
+            </p>
+          </div>
+          <ScrollArea className={scrollHeight}>
+            <ProjectDataFilesList projectId={projectId} />
+          </ScrollArea>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2 px-1">
+            <p className="text-sm font-medium text-foreground">
+              {panelView === "insufficient"
+                ? "Insufficient data personas"
+                : "Personas"}
+              {personas.length > 0 ? ` · ${personas.length}` : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <Select
+                value={sourceFilter}
+                onValueChange={(v) =>
+                  setSourceFilter(v as "all" | DataSourceKey)
+                }
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="text-xs"
+                  aria-label="Filter personas by data source"
+                >
+                  <SelectValue>
+                    {sourceFilter === "all" ? (
+                      <>
+                        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                        All sources
+                      </>
+                    ) : (
+                      (() => {
+                        const Icon = DATA_SOURCE_META[sourceFilter].icon;
+                        return (
+                          <>
+                            <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                            {DATA_SOURCE_META[sourceFilter].short}
+                          </>
+                        );
+                      })()
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent position="popper" align="end">
+                  <SelectItem value="all" className="text-xs">
                     <Filter className="h-3.5 w-3.5 text-muted-foreground" />
                     All sources
-                  </>
-                ) : (
-                  (() => {
-                    const Icon = DATA_SOURCE_META[sourceFilter].icon;
-                    return (
-                      <>
-                        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                        {DATA_SOURCE_META[sourceFilter].short}
-                      </>
-                    );
-                  })()
-                )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent position="popper" align="end">
-              <SelectItem value="all" className="text-xs">
-                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                All sources
-                <span className="ml-auto tabular-nums text-muted-foreground">
-                  {allPersonas.length}
-                </span>
-              </SelectItem>
-              <SelectSeparator />
-              {DATA_SOURCE_KEYS.map((key) => {
-                const meta = DATA_SOURCE_META[key];
-                const Icon = meta.icon;
-                return (
-                  <SelectItem key={key} value={key} className="text-xs">
-                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                    {meta.label}
-                    <span className="ml-auto pl-3 tabular-nums text-muted-foreground">
-                      {sourceCounts[key]}
+                    <span className="ml-auto tabular-nums text-muted-foreground">
+                      {allPersonas.length}
                     </span>
                   </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-          <div className="inline-flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5">
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              aria-pressed={view === "list"}
-              aria-label="List view"
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                view === "list"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <List className="h-3.5 w-3.5" />
-              List
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("grid")}
-              aria-pressed={view === "grid"}
-              aria-label="Grid view"
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                view === "grid"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Grid
-            </button>
+                  <SelectSeparator />
+                  {DATA_SOURCE_KEYS.map((key) => {
+                    const meta = DATA_SOURCE_META[key];
+                    const Icon = meta.icon;
+                    return (
+                      <SelectItem key={key} value={key} className="text-xs">
+                        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                        {meta.label}
+                        <span className="ml-auto pl-3 tabular-nums text-muted-foreground">
+                          {sourceCounts[key]}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <div className="inline-flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setView("list")}
+                  aria-pressed={view === "list"}
+                  aria-label="List view"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    view === "list"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <List className="h-3.5 w-3.5" />
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView("grid")}
+                  aria-pressed={view === "grid"}
+                  aria-label="Grid view"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    view === "grid"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Grid
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <ScrollArea className={scrollHeight}>
-        {personasQuery.isLoading ? (
-          view === "list" ? (
-            <div className="flex flex-col gap-2.5 p-1">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <PersonaListRowSkeleton key={`list-skeleton-${i}`} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Card
-                  key={`persona-skeleton-${i}`}
-                  className="flex h-[620px] flex-col"
-                >
-                  <CardContent className="flex flex-1 flex-col gap-4">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <Skeleton className="h-4 w-2/3" />
-                        <Skeleton className="h-3 w-1/3" />
-                      </div>
-                    </div>
-                    <Skeleton className="h-2 w-full rounded-full" />
-                    <Skeleton className="mt-auto h-9 w-full rounded-md" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )
-        ) : allPersonas.length === 0 ? (
-          <EmptyState
-            className="h-[400px] justify-center"
-            icon={<Users className="h-6 w-6" />}
-            title="No personas yet"
-            description="Use the persona-builder chat to create personas first."
-          />
-        ) : personas.length === 0 ? (
-          <EmptyState
-            className="h-[400px] justify-center"
-            icon={<Filter className="h-6 w-6" />}
-            title="No personas from this source"
-            description={
-              sourceFilter === "all"
-                ? undefined
-                : `None of this project's personas were built from ${DATA_SOURCE_META[sourceFilter].label}.`
-            }
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSourceFilter("all")}
-              >
-                Show all personas
-              </Button>
-            }
-          />
-        ) : view === "list" ? (
-          <div className="flex flex-col gap-2.5 p-1">
-            {personas.map((persona) => {
-              const isSelected = Boolean(selected[persona.persona_id]);
-              const isPending = pendingId === persona.persona_id;
-              const dash = evidenceByPersona.get(persona.persona_id);
-              const isInsufficient = Boolean(dash?.insufficient_data);
-              const coverage = dash?.final_coverage;
-              const hasCoverage = typeof coverage === "number" && coverage > 0;
-              const dashHasEvidence = Boolean(
-                dash &&
-                (dash.study_summary.length > 0 ||
-                  dash.evidence_by_category.length > 0),
-              );
-              const isEvidenceOpen = Boolean(openEvidence[persona.persona_id]);
-              return (
-                <div
-                  key={persona.persona_id}
-                  className={cn(
-                    "rounded-xl border bg-card ring-1 ring-foreground/5 transition-shadow hover:shadow-md",
-                    isSelected && "ring-2 ring-primary",
-                  )}
-                >
-                  <div className="flex items-center gap-3 p-3">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className={isInsufficient ? "cursor-not-allowed" : undefined}>
-                          <Checkbox
-                            className="border border-gray-200 shadow"
-                            checked={isSelected}
-                            disabled={isInsufficient}
-                            onCheckedChange={() => toggle(persona.persona_id)}
-                            aria-label={`Select ${persona.persona_name ?? "persona"}`}
-                          />
-                        </span>
-                      </TooltipTrigger>
-                      {isInsufficient && (
-                        <TooltipContent className="max-w-xs text-left leading-relaxed">
-                          {INSUFFICIENT_DATA_TOOLTIP}
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                      {personaInitials(persona.persona_name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      {editingId === persona.persona_id ? (
-                        <input
-                          autoFocus
-                          value={draft}
-                          maxLength={150}
-                          disabled={updatePersona.isPending}
-                          onChange={(e) => setDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              e.currentTarget.blur();
-                            } else if (e.key === "Escape") {
-                              e.preventDefault();
-                              cancelRenameRef.current = true;
-                              e.currentTarget.blur();
-                            }
-                          }}
-                          onBlur={() => {
-                            if (cancelRenameRef.current) {
-                              cancelRenameRef.current = false;
-                              setEditingId(null);
-                              return;
-                            }
-                            submitRename(
-                              persona.persona_id,
-                              persona.persona_name,
-                            );
-                          }}
-                          className="w-full rounded-md border border-input bg-background px-1.5 py-0.5 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                        />
-                      ) : (
-                        <div className="group/name flex items-center gap-1">
-                          <p
-                            className="truncate text-sm font-semibold text-foreground"
-                            title={persona.persona_name ?? "Untitled persona"}
-                          >
-                            {persona.persona_name ?? "Untitled persona"}
-                          </p>
-                          <button
-                            type="button"
-                            aria-label="Rename persona"
-                            onClick={() =>
-                              startRename(
-                                persona.persona_id,
-                                persona.persona_name,
-                              )
-                            }
-                            className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/name:opacity-100"
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                        </div>
-                      )}
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                        <DataSourceBadge source={persona.data_source} />
-                        {!isInsufficient && (
-                          <span className="capitalize">{persona.status}</span>
-                        )}
-                        {dash && dash.unique_studies > 0 && (
-                          <>
-                            <span aria-hidden>·</span>
-                            <span>
-                              {dash.unique_studies}{" "}
-                              {dash.unique_studies === 1 ? "study" : "studies"}
-                            </span>
-                          </>
-                        )}
-                        {dash && dash.unique_respondents > 0 && (
-                          <>
-                            <span aria-hidden>·</span>
-                            <span>
-                              {dash.unique_respondents.toLocaleString()}{" "}
-                              respondents
-                            </span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    {hasCoverage && (
-                      <div className="hidden w-36 shrink-0 sm:block">
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Coverage
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  aria-label="What does coverage mean?"
-                                  className="text-muted-foreground/70 transition-colors hover:text-foreground"
-                                >
-                                  <Info className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs text-left leading-relaxed">
-                                {COVERAGE_HOVER_TEXT}
-                              </TooltipContent>
-                            </Tooltip>
-                          </span>
-                          <span className="text-xs font-semibold tabular-nums text-foreground">
-                            {Math.round(coverage as number)}%
-                          </span>
-                        </div>
-                        <div className="h-1.5 w-full rounded-full bg-secondary">
-                          <div
-                            className={cn(
-                              "h-1.5 rounded-full transition-all",
-                              coverageColor(coverage as number),
-                            )}
-                            style={{ width: `${coverage}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {!dash && dashboardQuery.isLoading && (
-                      <div className="hidden w-36 shrink-0 sm:block">
-                        <Skeleton className="mb-1 h-2.5 w-16" />
-                        <Skeleton className="h-1.5 w-full rounded-full" />
-                      </div>
-                    )}
-                    {dashHasEvidence && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="shrink-0 gap-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => toggleEvidence(persona.persona_id)}
-                        aria-expanded={isEvidenceOpen}
-                      >
-                        Evidence
-                        <ChevronDown
-                          className={cn(
-                            "h-3.5 w-3.5 transition-transform",
-                            isEvidenceOpen && "rotate-180",
-                          )}
-                        />
-                      </Button>
-                    )}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className={cn("shrink-0", isInsufficient && "cursor-not-allowed")}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            disabled={isInsufficient || startGroup.isPending}
-                            onClick={() =>
-                              startChat(
-                                [persona.persona_id],
-                                persona.persona_name ?? "Persona",
-                                persona.persona_id,
-                              )
-                            }
-                          >
-                            {isPending ? (
-                              <CircularLoader size="sm" />
-                            ) : (
-                              <MessageSquare className="mr-2 h-4 w-4" />
-                            )}
-                            Chat
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {isInsufficient && (
-                        <TooltipContent className="max-w-xs text-left leading-relaxed">
-                          {INSUFFICIENT_DATA_TOOLTIP}
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </div>
-                  {isEvidenceOpen && dashHasEvidence && (
-                    <div className="border-t p-3 duration-200 animate-in fade-in slide-in-from-top-1">
-                      <PersonaEvidence
-                        data={dash}
-                        showCoverage={false}
-                        evidenceCols={2}
-                        collapsible={false}
-                      />
-                    </div>
-                  )}
+          <ScrollArea className={scrollHeight}>
+            {personasQuery.isLoading ? (
+              view === "list" ? (
+                <div className="flex flex-col gap-2.5 p-1">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <PersonaListRowSkeleton key={`list-skeleton-${i}`} />
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
-            {personas.map((persona, index) => {
-              const isSelected = Boolean(selected[persona.persona_id]);
-              const isPending = pendingId === persona.persona_id;
-              const rowIndex = Math.floor(index / columns);
-              const isExpanded = Boolean(expandedRows[rowIndex]);
-              const dash = evidenceByPersona.get(persona.persona_id);
-              const isInsufficient = Boolean(dash?.insufficient_data);
-              return (
-                <Card
-                  key={persona.persona_id}
-                  style={{
-                    animationDelay: `${Math.min(index, 12) * 40}ms`,
-                    animationFillMode: "backwards",
-                  }}
-                  className={cn(
-                    "flex flex-col transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 hover:shadow-md",
-                    // Collapsed: fixed height, evidence scrolls inside. Expanded:
-                    // drop the cap and stretch to the row's tallest card so every
-                    // card in the row ends up the same height.
-                    isExpanded ? "self-stretch" : "h-[620px]",
-                    isSelected && "ring-2 ring-primary",
-                  )}
-                >
-                  <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+              ) : (
+                <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Card
+                      key={`persona-skeleton-${i}`}
+                      className="flex h-[620px] flex-col"
+                    >
+                      <CardContent className="flex flex-1 flex-col gap-4">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <Skeleton className="h-4 w-2/3" />
+                            <Skeleton className="h-3 w-1/3" />
+                          </div>
+                        </div>
+                        <Skeleton className="h-2 w-full rounded-full" />
+                        <Skeleton className="mt-auto h-9 w-full rounded-md" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )
+            ) : allPersonas.length === 0 ? (
+              <EmptyState
+                className="h-[400px] justify-center"
+                icon={<Users className="h-6 w-6" />}
+                title="No personas yet"
+                description="Use the persona-builder chat to create personas first."
+              />
+            ) : personas.length === 0 && panelView === "insufficient" ? (
+              <EmptyState
+                className="h-[400px] justify-center"
+                icon={<CheckCircle2 className="h-6 w-6" />}
+                title="No personas with insufficient data"
+                description={
+                  sourceFilter === "all"
+                    ? "Every persona in this project matched enough respondents to chat with."
+                    : `No ${DATA_SOURCE_META[sourceFilter].label} persona is short of respondent data.`
+                }
+              />
+            ) : personas.length === 0 ? (
+              <EmptyState
+                className="h-[400px] justify-center"
+                icon={<Filter className="h-6 w-6" />}
+                title="No personas from this source"
+                description={
+                  sourceFilter === "all"
+                    ? undefined
+                    : `None of this project's personas were built from ${DATA_SOURCE_META[sourceFilter].label}.`
+                }
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSourceFilter("all")}
+                  >
+                    Show all personas
+                  </Button>
+                }
+              />
+            ) : view === "list" ? (
+              <div className="flex flex-col gap-2.5 p-1">
+                {personas.map((persona) => {
+                  const isSelected = Boolean(selected[persona.persona_id]);
+                  const isPending = pendingId === persona.persona_id;
+                  const dash = evidenceByPersona.get(persona.persona_id);
+                  const isInsufficient = Boolean(dash?.insufficient_data);
+                  const coverage = dash?.final_coverage;
+                  const hasCoverage =
+                    typeof coverage === "number" && coverage > 0;
+                  const dashHasEvidence = Boolean(
+                    dash &&
+                    (dash.study_summary.length > 0 ||
+                      dash.evidence_by_category.length > 0),
+                  );
+                  const isEvidenceOpen = Boolean(
+                    openEvidence[persona.persona_id],
+                  );
+                  return (
+                    <div
+                      key={persona.persona_id}
+                      className={cn(
+                        "rounded-xl border bg-card ring-1 ring-foreground/5 transition-shadow hover:shadow-md",
+                        isSelected && "ring-2 ring-primary",
+                      )}
+                    >
+                      <div className="flex items-center gap-3 p-3">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className={
+                                isInsufficient
+                                  ? "cursor-not-allowed"
+                                  : undefined
+                              }
+                            >
+                              <Checkbox
+                                className="border border-gray-200 shadow"
+                                checked={isSelected}
+                                disabled={isInsufficient}
+                                onCheckedChange={() =>
+                                  toggle(persona.persona_id)
+                                }
+                                aria-label={`Select ${persona.persona_name ?? "persona"}`}
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          {isInsufficient && (
+                            <TooltipContent className="max-w-xs text-left leading-relaxed">
+                              {INSUFFICIENT_DATA_TOOLTIP}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                           {personaInitials(persona.persona_name)}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -827,8 +698,13 @@ function PersonaPanel({
                               className="w-full rounded-md border border-input bg-background px-1.5 py-0.5 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                             />
                           ) : (
-                            <div className="group/name flex items-start gap-1">
-                              <p className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-foreground">
+                            <div className="group/name flex items-center gap-1">
+                              <p
+                                className="truncate text-sm font-semibold text-foreground"
+                                title={
+                                  persona.persona_name ?? "Untitled persona"
+                                }
+                              >
                                 {persona.persona_name ?? "Untitled persona"}
                               </p>
                               <button
@@ -846,164 +722,411 @@ function PersonaPanel({
                               </button>
                             </div>
                           )}
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                             <DataSourceBadge source={persona.data_source} />
-                            {!isInsufficient && (
-                              <span className="capitalize">{persona.status}</span>
+                            {isInsufficient ? (
+                              <InsufficientDataBadge />
+                            ) : (
+                              <span className="capitalize">
+                                {persona.status}
+                              </span>
                             )}
-                          </div>
+                            {dash && dash.unique_studies > 0 && (
+                              <>
+                                <span aria-hidden>·</span>
+                                <span>
+                                  {dash.unique_studies}{" "}
+                                  {dash.unique_studies === 1
+                                    ? "study"
+                                    : "studies"}
+                                </span>
+                              </>
+                            )}
+                            {dash && dash.unique_respondents > 0 && (
+                              <>
+                                <span aria-hidden>·</span>
+                                <span>
+                                  {dash.unique_respondents.toLocaleString()}{" "}
+                                  respondents
+                                </span>
+                              </>
+                            )}
+                          </p>
                         </div>
-                      </div>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className={isInsufficient ? "cursor-not-allowed" : undefined}>
-                            <Checkbox
-                              className="border border-gray-200 shadow"
-                              checked={isSelected}
-                              disabled={isInsufficient}
-                              onCheckedChange={() => toggle(persona.persona_id)}
-                              aria-label={`Select ${persona.persona_name ?? "persona"}`}
-                            />
-                          </span>
-                        </TooltipTrigger>
-                        {isInsufficient && (
-                          <TooltipContent className="max-w-xs text-left leading-relaxed">
-                            {INSUFFICIENT_DATA_TOOLTIP}
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    </div>
-
-                    {!isBuilderPersona(persona) &&
-                      evidenceByPersona.get(persona.persona_id)
-                        ?.final_coverage == null && (
-                        <div>
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Coverage
-                            </span>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "shrink-0",
-                                confidenceColors[persona.confidence],
-                              )}
-                            >
-                              {persona.confidence}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 flex-1 rounded-full bg-secondary">
+                        {hasCoverage && (
+                          <div className="hidden w-36 shrink-0 sm:block">
+                            <div className="mb-1 flex items-center justify-between">
+                              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Coverage
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      aria-label="What does coverage mean?"
+                                      className="text-muted-foreground/70 transition-colors hover:text-foreground"
+                                    >
+                                      <Info className="h-3 w-3" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs text-left leading-relaxed">
+                                    {COVERAGE_HOVER_TEXT}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </span>
+                              <span className="text-xs font-semibold tabular-nums text-foreground">
+                                {Math.round(coverage as number)}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-secondary">
                               <div
                                 className={cn(
-                                  "h-2 rounded-full transition-all animate-[coverage-grow_0.8s_ease-out]",
-                                  coverageColor(persona.coverage),
+                                  "h-1.5 rounded-full transition-all",
+                                  coverageColor(coverage as number),
                                 )}
-                                style={{ width: `${persona.coverage}%` }}
+                                style={{ width: `${coverage}%` }}
                               />
                             </div>
-                            <span className="text-xs font-semibold tabular-nums text-foreground">
-                              {persona.coverage}%
-                            </span>
                           </div>
+                        )}
+                        {!dash && dashboardQuery.isLoading && (
+                          <div className="hidden w-36 shrink-0 sm:block">
+                            <Skeleton className="mb-1 h-2.5 w-16" />
+                            <Skeleton className="h-1.5 w-full rounded-full" />
+                          </div>
+                        )}
+                        {dashHasEvidence && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0 gap-1 text-muted-foreground hover:text-foreground"
+                            onClick={() => toggleEvidence(persona.persona_id)}
+                            aria-expanded={isEvidenceOpen}
+                          >
+                            Evidence
+                            <ChevronDown
+                              className={cn(
+                                "h-3.5 w-3.5 transition-transform",
+                                isEvidenceOpen && "rotate-180",
+                              )}
+                            />
+                          </Button>
+                        )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className={cn(
+                                "shrink-0",
+                                isInsufficient && "cursor-not-allowed",
+                              )}
+                            >
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                disabled={
+                                  isInsufficient || startGroup.isPending
+                                }
+                                onClick={() =>
+                                  startChat(
+                                    [persona.persona_id],
+                                    persona.persona_name ?? "Persona",
+                                    persona.persona_id,
+                                  )
+                                }
+                              >
+                                {isPending ? (
+                                  <CircularLoader size="sm" />
+                                ) : (
+                                  <MessageSquare className="mr-2 h-4 w-4" />
+                                )}
+                                Chat
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          {isInsufficient && (
+                            <TooltipContent className="max-w-xs text-left leading-relaxed">
+                              {INSUFFICIENT_DATA_TOOLTIP}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </div>
+                      {isEvidenceOpen && dashHasEvidence && (
+                        <div className="border-t p-3 duration-200 animate-in fade-in slide-in-from-top-1">
+                          <PersonaEvidence
+                            data={dash}
+                            showCoverage={false}
+                            evidenceCols={2}
+                            collapsible={false}
+                          />
                         </div>
                       )}
-
-                    {dash ? (
-                      <PersonaEvidence
-                        data={dash}
-                        className="border-t pt-3"
-                        expanded={isExpanded}
-                        onExpandedChange={(next) =>
-                          setExpandedRows((prev) => ({
-                            ...prev,
-                            [rowIndex]: next,
-                          }))
-                        }
-                      />
-                    ) : dashboardQuery.isLoading ? (
-                      <EvidenceSkeleton />
-                    ) : null}
-
-                    <div className="mt-auto pt-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className={cn("block", isInsufficient && "cursor-not-allowed")}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              disabled={isInsufficient || startGroup.isPending}
-                              onClick={() =>
-                                startChat(
-                                  [persona.persona_id],
-                                  persona.persona_name ?? "Persona",
-                                  persona.persona_id,
-                                )
-                              }
-                            >
-                              {isPending ? (
-                                <CircularLoader size="sm" />
-                              ) : (
-                                <MessageSquare className="mr-2 h-4 w-4" />
-                              )}
-                              Chat
-                            </Button>
-                          </span>
-                        </TooltipTrigger>
-                        {isInsufficient && (
-                          <TooltipContent className="max-w-xs text-left leading-relaxed">
-                            {INSUFFICIENT_DATA_TOOLTIP}
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </ScrollArea>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 items-start gap-4 p-1 md:grid-cols-3">
+                {personas.map((persona, index) => {
+                  const isSelected = Boolean(selected[persona.persona_id]);
+                  const isPending = pendingId === persona.persona_id;
+                  const rowIndex = Math.floor(index / columns);
+                  const isExpanded = Boolean(expandedRows[rowIndex]);
+                  const dash = evidenceByPersona.get(persona.persona_id);
+                  const isInsufficient = Boolean(dash?.insufficient_data);
+                  return (
+                    <Card
+                      key={persona.persona_id}
+                      style={{
+                        animationDelay: `${Math.min(index, 12) * 40}ms`,
+                        animationFillMode: "backwards",
+                      }}
+                      className={cn(
+                        "flex flex-col transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 hover:shadow-md",
+                        // Collapsed: fixed height, evidence scrolls inside. Expanded:
+                        // drop the cap and stretch to the row's tallest card so every
+                        // card in the row ends up the same height.
+                        isExpanded ? "self-stretch" : "h-[620px]",
+                        isSelected && "ring-2 ring-primary",
+                      )}
+                    >
+                      <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                              {personaInitials(persona.persona_name)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              {editingId === persona.persona_id ? (
+                                <input
+                                  autoFocus
+                                  value={draft}
+                                  maxLength={150}
+                                  disabled={updatePersona.isPending}
+                                  onChange={(e) => setDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      e.currentTarget.blur();
+                                    } else if (e.key === "Escape") {
+                                      e.preventDefault();
+                                      cancelRenameRef.current = true;
+                                      e.currentTarget.blur();
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (cancelRenameRef.current) {
+                                      cancelRenameRef.current = false;
+                                      setEditingId(null);
+                                      return;
+                                    }
+                                    submitRename(
+                                      persona.persona_id,
+                                      persona.persona_name,
+                                    );
+                                  }}
+                                  className="w-full rounded-md border border-input bg-background px-1.5 py-0.5 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                />
+                              ) : (
+                                <div className="group/name flex items-start gap-1">
+                                  <p className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-foreground">
+                                    {persona.persona_name ?? "Untitled persona"}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    aria-label="Rename persona"
+                                    onClick={() =>
+                                      startRename(
+                                        persona.persona_id,
+                                        persona.persona_name,
+                                      )
+                                    }
+                                    className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/name:opacity-100"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )}
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <DataSourceBadge source={persona.data_source} />
+                                {isInsufficient ? (
+                                  <InsufficientDataBadge />
+                                ) : (
+                                  <span className="capitalize">
+                                    {persona.status}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={
+                                  isInsufficient
+                                    ? "cursor-not-allowed"
+                                    : undefined
+                                }
+                              >
+                                <Checkbox
+                                  className="border border-gray-200 shadow"
+                                  checked={isSelected}
+                                  disabled={isInsufficient}
+                                  onCheckedChange={() =>
+                                    toggle(persona.persona_id)
+                                  }
+                                  aria-label={`Select ${persona.persona_name ?? "persona"}`}
+                                />
+                              </span>
+                            </TooltipTrigger>
+                            {isInsufficient && (
+                              <TooltipContent className="max-w-xs text-left leading-relaxed">
+                                {INSUFFICIENT_DATA_TOOLTIP}
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </div>
 
-      <div className="flex items-center justify-between gap-2 pt-1">
-        <div className="flex items-center gap-3">
-          {personas.length > 0 && (
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={toggleSelectAll}
-                aria-label="Select all personas"
-              />
-              Select all
-            </label>
+                        {!isBuilderPersona(persona) &&
+                          evidenceByPersona.get(persona.persona_id)
+                            ?.final_coverage == null && (
+                            <div>
+                              <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Coverage
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "shrink-0",
+                                    confidenceColors[persona.confidence],
+                                  )}
+                                >
+                                  {persona.confidence}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 flex-1 rounded-full bg-secondary">
+                                  <div
+                                    className={cn(
+                                      "h-2 rounded-full transition-all animate-[coverage-grow_0.8s_ease-out]",
+                                      coverageColor(persona.coverage),
+                                    )}
+                                    style={{ width: `${persona.coverage}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs font-semibold tabular-nums text-foreground">
+                                  {persona.coverage}%
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                        {dash ? (
+                          <PersonaEvidence
+                            data={dash}
+                            className="border-t pt-3"
+                            expanded={isExpanded}
+                            onExpandedChange={(next) =>
+                              setExpandedRows((prev) => ({
+                                ...prev,
+                                [rowIndex]: next,
+                              }))
+                            }
+                          />
+                        ) : dashboardQuery.isLoading ? (
+                          <EvidenceSkeleton />
+                        ) : null}
+
+                        <div className="mt-auto pt-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={cn(
+                                  "block",
+                                  isInsufficient && "cursor-not-allowed",
+                                )}
+                              >
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full"
+                                  disabled={
+                                    isInsufficient || startGroup.isPending
+                                  }
+                                  onClick={() =>
+                                    startChat(
+                                      [persona.persona_id],
+                                      persona.persona_name ?? "Persona",
+                                      persona.persona_id,
+                                    )
+                                  }
+                                >
+                                  {isPending ? (
+                                    <CircularLoader size="sm" />
+                                  ) : (
+                                    <MessageSquare className="mr-2 h-4 w-4" />
+                                  )}
+                                  Chat
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {isInsufficient && (
+                              <TooltipContent className="max-w-xs text-left leading-relaxed">
+                                {INSUFFICIENT_DATA_TOOLTIP}
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+
+          {panelView === "personas" && (
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <div className="flex items-center gap-3">
+                {personas.length > 0 && (
+                  <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all personas"
+                    />
+                    Select all
+                  </label>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {selectedPersonas.length > 0
+                    ? `${selectedPersonas.length} selected`
+                    : "Select personas to start a group chat"}
+                </span>
+              </div>
+              <Button
+                disabled={selectedPersonas.length === 0 || startGroup.isPending}
+                onClick={() =>
+                  startChat(
+                    selectedPersonas.map((p) => p.persona_id),
+                    groupTitle(
+                      selectedPersonas.map((p) => p.persona_name ?? "Persona"),
+                    ),
+                    "group",
+                  )
+                }
+              >
+                {pendingId === "group" ? (
+                  <CircularLoader size="sm" className="border-white" />
+                ) : (
+                  <Users className="mr-2 h-4 w-4" />
+                )}
+                Start Group Chat
+              </Button>
+            </div>
           )}
-          <span className="text-xs text-muted-foreground">
-            {selectedPersonas.length > 0
-              ? `${selectedPersonas.length} selected`
-              : "Select personas to start a group chat"}
-          </span>
-        </div>
-        <Button
-          disabled={selectedPersonas.length === 0 || startGroup.isPending}
-          onClick={() =>
-            startChat(
-              selectedPersonas.map((p) => p.persona_id),
-              groupTitle(
-                selectedPersonas.map((p) => p.persona_name ?? "Persona"),
-              ),
-              "group",
-            )
-          }
-        >
-          {pendingId === "group" ? (
-            <CircularLoader size="sm" className="border-white" />
-          ) : (
-            <Users className="mr-2 h-4 w-4" />
-          )}
-          Start Group Chat
-        </Button>
-      </div>
+        </>
+      )}
     </>
   );
 }

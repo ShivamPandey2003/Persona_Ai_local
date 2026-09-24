@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
-import { http } from "msw";
+import { http, HttpResponse } from "msw";
 import { renderWithProviders } from "@/test/test-utils";
 import { server } from "@/test/msw/server";
 import { API_URL, ok } from "@/test/msw/handlers";
@@ -206,5 +206,75 @@ describe("PersonaPanel", () => {
 
     await waitFor(() => expect(body).not.toBeNull());
     expect(body).toMatchObject({ persona_id: "pa", persona_name: "Renamed Persona" });
+  });
+
+  it("narrows the list to insufficient-data personas from its tile", async () => {
+    seedPersonas(
+      [makePersona(), makePersona({ persona_id: "pb", persona_name: "Beta" })],
+      [
+        { persona_id: "pa", persona_name: "Alpha", insufficient_data: true, study_summary: [], evidence_by_category: [], unique_studies: 0, unique_respondents: 2 },
+        { persona_id: "pb", persona_name: "Beta", insufficient_data: false, study_summary: [], evidence_by_category: [], unique_studies: 1, unique_respondents: 50 },
+      ],
+    );
+    const { user } = renderWithProviders(<PersonaPanel projectId="p1" />);
+    await screen.findByText("Beta");
+
+    await user.click(screen.getByRole("button", { name: /Insufficient Data/ }));
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+    // Nothing here can be chatted with, so the group-chat footer is gone.
+    expect(screen.queryByRole("button", { name: /start group chat/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Personas Created/ }));
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+  });
+
+  it("lists the project's data files and downloads one", async () => {
+    seedPersonas([makePersona()]);
+    let downloadBody: Record<string, unknown> | null = null;
+    server.use(
+      http.post(`${API_URL}projects/files/list`, () =>
+        ok({
+          files: [
+            { file_id: "f1", file_name: "wave1.xlsx", status: "processed", rows: 120, created_at: "2026-09-01T10:00:00" },
+          ],
+        }),
+      ),
+      http.post(`${API_URL}projects/files/data/download`, async ({ request }) => {
+        downloadBody = (await request.json()) as Record<string, unknown>;
+        return new HttpResponse(new Blob(["bytes"]), {
+          headers: { "Content-Type": "application/octet-stream" },
+        });
+      }),
+    );
+    const createObjectURL = vi.fn(() => "blob:fake");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+
+    const { user } = renderWithProviders(<PersonaPanel projectId="p1" />);
+    await screen.findByText("Alpha");
+
+    await user.click(screen.getByRole("button", { name: /Data Files/ }));
+    expect(await screen.findByText("wave1.xlsx")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Download wave1.xlsx" }));
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    expect(downloadBody).toMatchObject({ project_id: "p1", file_id: "f1" });
+    expect(createObjectURL).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it("shows an empty state when no data files were uploaded", async () => {
+    seedPersonas([makePersona()]);
+    server.use(http.post(`${API_URL}projects/files/list`, () => ok({ files: [] })));
+    const { user } = renderWithProviders(<PersonaPanel projectId="p1" />);
+    await screen.findByText("Alpha");
+
+    await user.click(screen.getByRole("button", { name: /Data Files/ }));
+    expect(await screen.findByText("No data files yet")).toBeInTheDocument();
   });
 });
