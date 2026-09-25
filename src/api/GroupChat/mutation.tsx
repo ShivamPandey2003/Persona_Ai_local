@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { getAuthToken, postApi } from "@/lib/api";
+import { apiRequest } from "@/services/apiService";
 import { upsertSession } from "@/lib/chatStore";
 import { queryClient } from "@/provider";
 import { groupAssumptionsKey, groupSuggestionsKey } from "./query";
@@ -307,3 +308,59 @@ export const useRemoveAssumption = (groupId: string) => {
     },
   });
 };
+
+/* ------------------------------------------------------------------ */
+/* Insights report                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Filename from `Content-Disposition` (RFC 5987 `filename*` first). */
+function fileNameFromDisposition(header: unknown): string | null {
+  const value = typeof header === "string" ? header : "";
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(value);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim());
+    } catch {
+      /* fall through to the plain form */
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(value);
+  return plain ? plain[1].trim() : null;
+}
+
+/**
+ * POST /v1/persona/group-chat/insights/download — builds an audience-insights
+ * report (Word .docx) from the whole transcript and saves it in the browser.
+ *
+ * The report is generated per request (one LLM call), so this can take a
+ * while; failures (including the per-chat download limit) come back as the
+ * usual JSON envelope and are toasted by `apiRequest`.
+ */
+export const useDownloadGroupInsights = (groupId: string) =>
+  useMutation<void, Error, void>({
+    mutationKey: ["DownloadGroupInsights", groupId],
+    mutationFn: async () => {
+      const res = await apiRequest(
+        "post",
+        "persona/group-chat/insights/download",
+        { token: getAuthToken(), group_id: groupId },
+        "blob",
+      );
+      const file = res?.response;
+      if (!(file instanceof Blob) || file.size === 0) {
+        throw new Error("Couldn't download the insights report.");
+      }
+      const fileName =
+        fileNameFromDisposition(res?.headers?.["content-disposition"]) ??
+        `insights_${groupId}.docx`;
+
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    },
+  });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import {
+  Download,
   ImagePlus,
   Loader2,
   Mic,
@@ -50,6 +51,7 @@ import { useChatList } from "@/api/Chat/query";
 import {
   useGroupBroadcast,
   useGroupMessageSingle,
+  useDownloadGroupInsights,
   uploadGroupImages,
 } from "@/api/GroupChat/mutation";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
@@ -110,6 +112,7 @@ function GroupChatView() {
   const participantsQuery = useGroupChatParticipants(groupId);
   const broadcastMut = useGroupBroadcast(groupId ?? "");
   const singleMut = useGroupMessageSingle(groupId ?? "");
+  const insightsMut = useDownloadGroupInsights(groupId ?? "");
   // Read only: the dialog owns every write. Shared cache key, so applying or
   // removing an assumption in there refreshes this badge with no extra request.
   const assumptionsQuery = useGroupAssumptions(groupId);
@@ -479,6 +482,19 @@ function GroupChatView() {
                 {assumptionCount}
               </span>
             )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={insightsMut.isPending || sending || messages.length === 0}
+            onClick={() => insightsMut.mutate()}
+          >
+            {insightsMut.isPending ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-1.5 h-4 w-4" />
+            )}
+            {insightsMut.isPending ? "Preparing insights…" : "Download insights"}
           </Button>
         </div>
       </div>
