@@ -66,6 +66,32 @@ describe("ConversationPromptInput", () => {
     expect(await screen.findByText("Got it!")).toBeInTheDocument();
   });
 
+  it("shows a thinking status until the builder replies", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat/history`, () =>
+        ok({ messages: [], pagination: { total: 0 }, data_source_selected: true }),
+      ),
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post(`${API_URL}persona/chat/message`, async () => {
+        await gate;
+        return ok({ id: "c1", messages: [{ role: "assistant", content: "Ready" }], building_persona: 0 });
+      }),
+    );
+
+    const { user } = renderWithProviders(<ConversationPromptInput />);
+    await user.type(await screen.findByPlaceholderText(/describe your target persona/i), "Hi{Enter}");
+
+    expect(await screen.findByText("Persona builder is replying")).toBeInTheDocument();
+    expect(screen.getByText("Reading your message…")).toBeInTheDocument();
+
+    release();
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(screen.queryByText("Persona builder is replying")).not.toBeInTheDocument();
+  });
+
   it("shows the build progress and ends the chat when personas start building", async () => {
     server.use(
       http.post(`${API_URL}persona/chat/history`, () =>

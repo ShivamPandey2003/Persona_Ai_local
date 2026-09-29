@@ -67,4 +67,49 @@ describe("GroupMessage", () => {
     await user.click(screen.getByRole("button")); // persona turn: only Copy
     expect(writeSpy).toHaveBeenCalledWith("I'd prioritise affordability.");
   });
+
+  it("offers Reply on a persona turn and passes the message back", async () => {
+    const onReply = vi.fn();
+    const message = { id: "m1", persona_id: "p-ann", ...personaTurn };
+    const { user } = render({ message, onReply });
+    await user.click(screen.getByRole("button", { name: "Reply to Ann Lee" }));
+    expect(onReply).toHaveBeenCalledWith(message);
+  });
+
+  it("shows Reply as an icon whose label appears on hover", async () => {
+    const { user } = render({ message: personaTurn, onReply: vi.fn() });
+    const reply = screen.getByRole("button", { name: "Reply to Ann Lee" });
+    expect(reply).not.toHaveTextContent(/\S/); // icon only, no visible text
+
+    await user.hover(reply);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Reply to Ann Lee");
+  });
+
+  it("hides Reply when onReply is omitted", () => {
+    render({ message: personaTurn });
+    expect(screen.queryByRole("button", { name: /reply/i })).not.toBeInTheDocument();
+  });
+
+  it("never offers Reply on a user turn", () => {
+    render({ message: userTurn, onReply: vi.fn() });
+    expect(screen.queryByRole("button", { name: /reply/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the confidence level, score and its explanation trigger", () => {
+    render({
+      message: {
+        ...personaTurn,
+        confidence_level: "Medium Confidence; mixed purchase interest",
+        confidence_score: 62,
+      },
+    });
+    expect(screen.getByText("Confidence level:")).toBeInTheDocument();
+    expect(screen.getByText(/Medium/)).toHaveTextContent("Medium · 62%");
+    expect(screen.getByRole("button", { name: "Why this confidence level" })).toBeInTheDocument();
+  });
+
+  it("shows no confidence row content when the level is missing", () => {
+    render({ message: personaTurn });
+    expect(screen.queryByText("Confidence level:")).not.toBeInTheDocument();
+  });
 });

@@ -19,6 +19,74 @@ export function ok<T>(response: T, message = "Success") {
   return HttpResponse.json({ header: { code: 200, message }, response });
 }
 
+/**
+ * Answer a streamed group-chat send with an NDJSON body, the way the backend
+ * does: one JSON object per line, flushed as it is produced.
+ *
+ * `personas` are the repliers; each one's text is emitted as two deltas so a
+ * test can prove the reply really arrived incrementally rather than at once.
+ */
+const NEWLINE = String.fromCharCode(10);
+
+export function ndjsonStream(
+  personas: { persona_id: string; persona_name: string; response: string }[],
+) {
+  const lines: unknown[] = [
+    {
+      type: "start",
+      personas: personas.map(({ persona_id, persona_name }) => ({ persona_id, persona_name })),
+    },
+  ];
+  for (const p of personas) {
+    const mid = Math.ceil(p.response.length / 2);
+    lines.push({ type: "persona_delta", persona_id: p.persona_id, delta: p.response.slice(0, mid) });
+    lines.push({ type: "persona_delta", persona_id: p.persona_id, delta: p.response.slice(mid) });
+    lines.push({ type: "persona_done", persona_id: p.persona_id, confidence_level: "medium" });
+  }
+  lines.push({
+    type: "done",
+    responses: personas.map((p) => ({
+      persona_id: p.persona_id,
+      persona_name: p.persona_name,
+      response: p.response,
+      evidence_tags: [],
+    })),
+    images: [],
+  });
+
+  return ndjsonBody(lines);
+}
+
+/**
+ * Lower-level NDJSON response: each item is one line — objects are
+ * JSON-encoded, strings are sent verbatim (to simulate a garbled line). With
+ * `chunkBytes`, the encoded body is re-cut into chunks of that many bytes, so
+ * line breaks (and multi-byte characters) land mid-chunk the way they do on a
+ * real network.
+ */
+export function ndjsonBody(
+  lines: unknown[],
+  { chunkBytes, headers }: { chunkBytes?: number; headers?: Record<string, string> } = {},
+) {
+  const encoder = new TextEncoder();
+  const text = lines
+    .map((line) => (typeof line === "string" ? line : JSON.stringify(line)) + NEWLINE)
+    .join("");
+  const bytes = encoder.encode(text);
+  const size = chunkBytes ?? bytes.length;
+  const body = new ReadableStream({
+    start(controller) {
+      for (let i = 0; i < bytes.length; i += size) {
+        controller.enqueue(bytes.slice(i, i + size));
+      }
+      controller.close();
+    },
+  });
+  return new HttpResponse(body, {
+    headers: { "Content-Type": "application/x-ndjson", ...headers },
+  });
+}
+
 /** Build an error envelope (still HTTP 200, error lives in header.code). */
 export function envelopeError(code: number, message: string) {
   return HttpResponse.json({ header: { code, message }, response: null });

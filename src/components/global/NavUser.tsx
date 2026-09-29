@@ -43,16 +43,21 @@ export function NavUser() {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className={cn("data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground md:h-12 md:p-2 cursor-pointer")}
+              // A white card in the expanded sidebar; just the avatar in icon mode.
+              className={cn(
+                "cursor-pointer rounded-xl border border-sidebar-border bg-card shadow-xs md:h-12 md:p-2",
+                "hover:border-primary/30 hover:bg-card data-[state=open]:border-primary/30 data-[state=open]:bg-card",
+                "group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none",
+              )}
             >
-              <Avatar className="h-8 w-8 rounded-full">
-                <AvatarFallback className="rounded-full bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white">{getInitials(`${User.firstName} ${User.lastName}`)}</AvatarFallback>
+              <Avatar className="h-8 w-8 rounded-lg">
+                <AvatarFallback className="rounded-lg bg-primary text-xs font-semibold text-primary-foreground">{getInitials(`${User.firstName} ${User.lastName}`)}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{User.firstName} {User.lastName}</span>
+                <span className="truncate font-semibold">{User.firstName} {User.lastName}</span>
                 {/* <span className="truncate text-xs">{User.email}</span> */}
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
+              <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -63,8 +68,8 @@ export function NavUser() {
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-full">
-                  <AvatarFallback className="rounded-full bg-linear-to-r from-[#6338F6] to-[#8B5CF6] text-white">{getInitials(`${User.firstName} ${User.lastName}`)}</AvatarFallback>
+                <Avatar className="h-8 w-8 rounded-lg">
+                  <AvatarFallback className="rounded-lg bg-primary text-xs font-semibold text-primary-foreground">{getInitials(`${User.firstName} ${User.lastName}`)}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{User.firstName} {User.lastName}</span>

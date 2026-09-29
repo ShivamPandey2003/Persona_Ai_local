@@ -6,6 +6,7 @@ import {
   MessageContent,
 } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
+import { CHAT_COLUMN } from "./chatLayout";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { Check, Copy, Pencil } from "lucide-react";
 import { memo, useState } from "react";
@@ -42,7 +43,8 @@ export const MessageComponent = memo(
     return (
       <Message
         className={cn(
-          "mx-auto flex w-full max-w-3xl flex-col gap-2 px-2 md:px-10",
+          CHAT_COLUMN,
+          "flex flex-col gap-2 px-2 md:px-10",
           "duration-300 animate-in fade-in",
           isAssistant
             ? "items-start slide-in-from-left-2"

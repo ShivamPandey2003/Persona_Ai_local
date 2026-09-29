@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
+import { http } from "msw";
 import { renderWithProviders } from "@/test/test-utils";
+import { server } from "@/test/msw/server";
+import { API_URL, ok } from "@/test/msw/handlers";
 import { authenticate } from "@/test/factories";
 import Rootlayout from "../../layout/rootlayout";
 
@@ -26,5 +29,22 @@ describe("Rootlayout", () => {
   it("renders the sidebar brand", () => {
     renderWithProviders(<Rootlayout />, { route: "/dashboard" });
     expect(screen.getByText("Persona AI")).toBeInTheDocument();
+  });
+
+  it("keeps a long project name short in a chat's breadcrumb, full name on hover", async () => {
+    const longName = "Food & Grocery Study with a very long name that goes on and on";
+    server.use(
+      http.post(`${API_URL}projects/get`, () => ok({ project_id: "p1", project_name: longName })),
+    );
+    renderWithProviders(<Rootlayout />, {
+      // Chat routes carry their project in navigation state.
+      routerEntries: [
+        { pathname: "/group-chat/g1", state: { projectId: "p1" } } as unknown as string,
+      ],
+    });
+
+    const crumb = await screen.findByText(longName);
+    expect(crumb).toHaveAttribute("title", longName);
+    expect(crumb).toHaveClass("truncate", "max-w-48");
   });
 });

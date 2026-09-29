@@ -1,5 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CHAT_COLUMN } from "./chatLayout";
 
 type ChatEndedProps = {
   /** Copy describing the ended state (e.g. conversation vs. discussion). */
@@ -23,7 +24,8 @@ function ChatEnded({
       role="status"
       aria-live="polite"
       className={cn(
-        "mx-auto flex w-full max-w-3xl items-center justify-center gap-1.5 px-5 pb-1 text-center text-xs text-muted-foreground",
+        CHAT_COLUMN,
+        "flex items-center justify-center gap-1.5 px-5 pb-1 text-center text-xs text-muted-foreground",
         className,
       )}
     >

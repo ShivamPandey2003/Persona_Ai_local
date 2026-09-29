@@ -1,321 +1,451 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SpeechPlayer } from "@/lib/voice/speechPlayer";
+import {
+  SpeechPlayer,
+  type AudioOutput,
+  type PlayableBuffer,
+  type PlayableSource,
+} from "@/lib/voice/speechPlayer";
+import type { SpeechStreamArgs } from "@/api/Voice/voice";
+import type { AudioChunk } from "@/lib/voice/pcm";
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+/**
+ * A Web Audio stand-in with a hand-driven clock: `advance(s)` moves time on and
+ * fires `onended` for every source whose audio has finished by then.
+ */
+class FakeOutput implements AudioOutput {
+  currentTime = 0;
+  state = "running";
+  destination = {};
+  resume = vi.fn(async () => {
+    if (this.resumable) this.state = "running";
+  });
+  resumable = true;
+  sources: FakeSource[] = [];
 
-type Call = {
-  text: string;
-  speakerKey?: string;
-  groupId?: string;
-  signal: AbortSignal;
-  resolve: (blob: Blob) => void;
-  reject: (error: Error) => void;
+  createBuffer(_channels: number, length: number, sampleRate: number): PlayableBuffer {
+    return { duration: length / sampleRate, copyToChannel: vi.fn() };
+  }
+
+  createBufferSource(): PlayableSource {
+    const source = new FakeSource();
+    this.sources.push(source);
+    return source;
+  }
+
+  /** Real (non-silent) sources in start order: [start, duration]. */
+  get timeline(): [number, number][] {
+    return this.sources
+      .filter((s) => s.startedAt !== null && (s.buffer?.duration ?? 0) > 0.01)
+      .map((s) => [round(s.startedAt!), round(s.buffer!.duration)]);
+  }
+
+  advance(seconds: number) {
+    this.currentTime += seconds;
+    for (const s of this.sources) {
+      if (s.startedAt === null || s.ended || s.stopped) continue;
+      if (s.startedAt + (s.buffer?.duration ?? 0) <= this.currentTime) {
+        s.ended = true;
+        s.onended?.();
+      }
+    }
+  }
+}
+
+class FakeSource implements PlayableSource {
+  buffer: PlayableBuffer | null = null;
+  onended: (() => void) | null = null;
+  startedAt: number | null = null;
+  stopped = false;
+  ended = false;
+  connect = vi.fn();
+  disconnect = vi.fn();
+  start(when: number) {
+    this.startedAt = when;
+  }
+  stop() {
+    this.stopped = true;
+  }
+}
+
+const round = (n: number) => Math.round(n * 1000) / 1000;
+
+/** `seconds` of mono audio at 1 kHz (so frame counts stay small). */
+const audio = (seconds: number): AudioChunk => ({
+  sampleRate: 1000,
+  channels: [new Float32Array(Math.round(seconds * 1000))],
+});
+
+type Call = SpeechStreamArgs & {
+  push: (seconds: number) => void;
+  finish: () => void;
+  fail: (error: Error) => void;
 };
 
-function abortError() {
-  const error = new Error("cancelled");
-  error.name = "AbortError";
-  return error;
-}
-
-function fakeAudio() {
-  return {
-    src: "",
-    muted: false,
-    preload: "",
-    onended: null as null | (() => void),
-    onerror: null as null | (() => void),
-    play: vi.fn(() => Promise.resolve()),
-    pause: vi.fn(),
-    removeAttribute: vi.fn(function (this: { src: string }) {
-      this.src = "";
-    }),
-  };
-}
-
 function setup() {
+  const out = new FakeOutput();
   const calls: Call[] = [];
-  const audio = fakeAudio();
-  let urlCount = 0;
-  const deps = {
-    synthesize: vi.fn(
-      ({
-        text,
-        speakerKey,
-        groupId,
-        signal,
-      }: {
-        text: string;
-        speakerKey?: string;
-        groupId?: string;
-        signal: AbortSignal;
-      }) =>
-        new Promise<Blob>((resolve, reject) => {
-          calls.push({ text, speakerKey, groupId, signal, resolve, reject });
-          signal.addEventListener("abort", () => reject(abortError()));
-        }),
-    ),
-    createAudio: vi.fn(() => audio as unknown as HTMLAudioElement),
-    createObjectURL: vi.fn(() => `blob:${++urlCount}`),
-    revokeObjectURL: vi.fn(),
-    onError: vi.fn(),
-  };
-  const player = new SpeechPlayer(deps);
-  return { player, deps, calls, audio };
+  const synthesize = vi.fn(
+    (args: SpeechStreamArgs) =>
+      new Promise<void>((resolve, reject) => {
+        const call: Call = {
+          ...args,
+          push: (seconds) => args.onChunk(audio(seconds)),
+          finish: resolve,
+          fail: reject,
+        };
+        args.signal?.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+        calls.push(call);
+      }),
+  );
+  const onError = vi.fn();
+  const createOutput = vi.fn(() => out);
+  const player = new SpeechPlayer({ synthesize, createOutput, onError });
+  return { player, out, calls, synthesize, onError, createOutput };
 }
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const blob = (label: string) => new Blob([label], { type: "audio/wav" });
+/** Let promise continuations (fetch results, loop steps) run. */
+const flush = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+};
 
-describe("SpeechPlayer", () => {
-  let ctx: ReturnType<typeof setup>;
-  beforeEach(() => {
-    ctx = setup();
-  });
+beforeEach(() => {
+  vi.useRealTimers();
+});
 
-  it("reads queued items one after another and cleans up object URLs", async () => {
-    const { player, calls, audio, deps } = ctx;
-    const listener = vi.fn();
-    player.subscribe(listener);
-
-    player.enqueue({ id: "m1", text: "First.", speakerKey: "Ann" });
-    player.enqueue({ id: "m2", text: "Second.", speakerKey: "Bob" });
-    expect(player.statusOf("m1")).toBe("loading");
-    expect(player.statusOf("m2")).toBe("idle");
-    expect(calls.map((c) => [c.text, c.speakerKey])).toEqual([
-      ["First.", "Ann"],
-      ["Second.", "Bob"],
-    ]);
-
-    calls[0].resolve(blob("a"));
-    calls[1].resolve(blob("b"));
+describe("SpeechPlayer — streaming a reply as it is written", () => {
+  it("starts speaking after the first sentence, before the reply is finished", async () => {
+    const { player, out, calls } = setup();
+    player.open({ id: "m1", speakerKey: "Ann", groupId: "g1" });
+    player.append("m1", "Hello there");
     await flush();
-    expect(player.statusOf("m1")).toBe("playing");
-    expect(audio.src).toBe("blob:1");
-    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(0); // no whole sentence yet
 
-    audio.onended?.();
+    player.append("m1", ". I think it");
     await flush();
-    expect(deps.revokeObjectURL).toHaveBeenCalledWith("blob:1");
-    expect(player.statusOf("m2")).toBe("playing");
-
-    audio.onended?.();
-    await flush();
-    expect(player.statusOf("m2")).toBe("idle");
-    expect(deps.revokeObjectURL).toHaveBeenCalledWith("blob:2");
-    expect(listener).toHaveBeenCalled();
-  });
-
-  it("ignores blank text and duplicate ids", () => {
-    const { player, calls } = ctx;
-    player.enqueue({ id: "m1", text: "   " });
-    player.enqueue({ id: "m2", text: "Hi." });
-    player.enqueue({ id: "m2", text: "Hi." });
-    player.prefetch({ text: "  " });
     expect(calls).toHaveLength(1);
-  });
+    expect(calls[0]).toMatchObject({ text: "Hello there.", speakerKey: "Ann", groupId: "g1", announce: true });
 
-  it("toggle stops the message that is playing", async () => {
-    const { player, calls, audio } = ctx;
-    player.toggle({ id: "m1", text: "Hello." });
-    calls[0].resolve(blob("a"));
+    calls[0].push(0.5);
     await flush();
-    expect(player.statusOf("m1")).toBe("playing");
-
-    player.toggle({ id: "m1", text: "Hello." });
-    expect(player.statusOf("m1")).toBe("idle");
-    expect(audio.pause).toHaveBeenCalled();
-    expect(audio.removeAttribute).toHaveBeenCalledWith("src");
-  });
-
-  it("toggle on another message replaces the queue", async () => {
-    const { player, calls } = ctx;
-    player.enqueue({ id: "m1", text: "One." });
-    player.enqueue({ id: "m2", text: "Two." });
-    player.toggle({ id: "m3", text: "Three." });
-
-    expect(calls[0].signal.aborted).toBe(true);
-    expect(calls[1].signal.aborted).toBe(true);
-    expect(player.statusOf("m3")).toBe("loading");
-  });
-
-  it("stop cancels in-flight requests without reporting an error", async () => {
-    const { player, calls, deps } = ctx;
-    player.enqueue({ id: "m1", text: "One." });
-    player.stop();
-    await flush();
-    expect(calls[0].signal.aborted).toBe(true);
-    expect(deps.onError).not.toHaveBeenCalled();
-    expect(player.statusOf("m1")).toBe("idle");
-  });
-
-  it("replays a message from cache without synthesizing again", async () => {
-    const { player, calls, audio, deps } = ctx;
-    player.toggle({ id: "m1", text: "Hello.", speakerKey: "Ann" });
-    calls[0].resolve(blob("a"));
-    await flush();
-    audio.onended?.();
-    await flush();
-
-    player.toggle({ id: "m1", text: "Hello.", speakerKey: "Ann" });
-    await flush();
-    expect(deps.synthesize).toHaveBeenCalledTimes(1);
+    // Audio is scheduled while the persona is still "typing".
+    expect(out.timeline).toEqual([[0.05, 0.5]]);
     expect(player.statusOf("m1")).toBe("playing");
   });
 
-  it("shares one request between a prefetch and the later play", async () => {
-    const { player, calls, deps } = ctx;
-    player.prefetch({ text: "Hello.", speakerKey: "Ann" });
-    player.enqueue({ id: "m1", text: "Hello.", speakerKey: "Ann" });
-    expect(deps.synthesize).toHaveBeenCalledTimes(1);
-    calls[0].resolve(blob("a"));
+  it("announces the speaker on the first piece only", async () => {
+    const { player, calls } = setup();
+    player.open({ id: "m1", speakerKey: "Ann" });
+    player.append("m1", "First one. ");
+    player.append("m1", "Then a second sentence that is long enough to be its own piece of speech. ");
+    player.end("m1");
     await flush();
-    expect(player.statusOf("m1")).toBe("playing");
+    expect(calls.map((c) => [c.text, c.announce])).toEqual([
+      ["First one.", true],
+      ["Then a second sentence that is long enough to be its own piece of speech.", false],
+    ]);
   });
 
-  it("passes the group to synthesis and caches per group", async () => {
-    const { player, calls, deps } = ctx;
-    player.prefetch({ text: "Hello.", speakerKey: "Ann", groupId: "g1" });
-    calls[0].resolve(blob("a"));
+  it("plays pieces back to back as their audio streams in", async () => {
+    const { player, out, calls } = setup();
+    player.enqueue({
+      id: "m1",
+      text: "One. Two is a longer sentence that has plenty of words in it to stand alone here.",
+    });
     await flush();
-    expect(calls[0].groupId).toBe("g1");
-
-    // Same speaker and text in another group (or none) can have another voice.
-    player.prefetch({ text: "Hello.", speakerKey: "Ann", groupId: "g2" });
-    player.prefetch({ text: "Hello.", speakerKey: "Ann" });
-    player.prefetch({ text: "Hello.", speakerKey: "Ann", groupId: "g1" });
-    expect(deps.synthesize).toHaveBeenCalledTimes(3);
-    expect(calls.map((c) => c.groupId)).toEqual(["g1", "g2", undefined]);
+    calls[0].push(0.3);
+    calls[0].push(0.2);
+    calls[1].push(1);
+    calls[0].finish();
+    calls[1].finish();
+    await flush();
+    // Chunks of a piece, then the next piece, with no gaps.
+    expect(out.timeline).toEqual([
+      [0.05, 0.3],
+      [0.35, 0.2],
+      [0.55, 1],
+    ]);
   });
 
-  it("fetches at most two clips at once", async () => {
-    const { player, calls } = ctx;
-    player.prefetch({ text: "One." });
-    player.prefetch({ text: "Two." });
-    player.prefetch({ text: "Three." });
+  it("speaks personas one at a time, in order, with a breath between them", async () => {
+    const { player, out, calls } = setup();
+    player.open({ id: "a", speakerKey: "Ann" });
+    player.open({ id: "b", speakerKey: "Bob" });
+    player.append("b", "Bob talks first on the wire. ");
+    player.append("a", "Ann was opened first. ");
+    await flush();
+    // Both are fetched ahead...
+    expect(calls.map((c) => c.speakerKey).sort()).toEqual(["Ann", "Bob"]);
+    const bob = calls.find((c) => c.speakerKey === "Bob")!;
+    const ann = calls.find((c) => c.speakerKey === "Ann")!;
+    bob.push(1);
+    bob.finish();
+    await flush();
+    // ...but Bob waits for Ann, who hasn't ended.
+    expect(out.timeline).toEqual([]);
+
+    ann.push(1);
+    ann.finish();
+    player.end("a");
+    player.end("b");
+    await flush();
+    expect(out.timeline).toEqual([
+      [0.05, 1],
+      [1.4, 1], // 0.35s gap after Ann's audio ends at 1.05
+    ]);
+  });
+
+  it("fetches at most two pieces at once", async () => {
+    const { player, calls } = setup();
+    for (const id of ["a", "b", "c", "d"]) player.enqueue({ id, text: `Reply ${id}.` });
     await flush();
     expect(calls).toHaveLength(2);
-
-    calls[0].resolve(blob("1"));
+    calls[0].push(0.1);
+    calls[0].finish();
     await flush();
     expect(calls).toHaveLength(3);
-    expect(calls[2].text).toBe("Three.");
   });
 
-  it("keeps only the most recent clips cached", async () => {
-    const { player, calls, deps } = ctx;
-    for (let i = 0; i < 21; i += 1) {
-      player.prefetch({ text: `Clip ${i}.` });
-      await flush();
-      calls[i].resolve(blob(String(i)));
-      await flush();
-    }
-    player.prefetch({ text: "Clip 20." });
-    expect(deps.synthesize).toHaveBeenCalledTimes(21);
-    player.prefetch({ text: "Clip 0." });
+  it("skips speechless pieces without using up the announcement", async () => {
+    const { player, calls } = setup();
+    player.open({ id: "m1", speakerKey: "Ann" });
+    player.append("m1", "---\n");
+    player.append("m1", "Real words here.\n");
+    player.end("m1");
     await flush();
-    expect(deps.synthesize).toHaveBeenCalledTimes(22);
+    expect(calls.map((c) => [c.text, c.announce])).toEqual([["Real words here.", true]]);
   });
 
-  it("reports a synthesis failure and moves on to the next reply", async () => {
-    const { player, calls, deps } = ctx;
-    player.enqueue({ id: "m1", text: "One." });
-    player.enqueue({ id: "m2", text: "Two." });
-    calls[0].reject(new Error("Text to speech is unavailable right now"));
-    calls[1].resolve(blob("b"));
+  it("ignores text for unknown or ended utterances", async () => {
+    const { player, calls } = setup();
+    player.append("nope", "Hello.");
+    player.open({ id: "m1" });
+    player.end("m1");
+    player.end("m1");
+    player.append("m1", "Too late.");
     await flush();
-
-    expect(deps.onError).toHaveBeenCalledWith("Text to speech is unavailable right now");
-    expect(player.statusOf("m2")).toBe("playing");
+    expect(calls).toHaveLength(0);
   });
+});
 
-  it("reports an audio element error and moves on", async () => {
-    const { player, calls, audio, deps } = ctx;
-    player.enqueue({ id: "m1", text: "One." });
-    player.enqueue({ id: "m2", text: "Two." });
-    calls[0].resolve(blob("a"));
-    calls[1].resolve(blob("b"));
+describe("SpeechPlayer — status", () => {
+  it("is loading while waiting, playing while audible, idle when done", async () => {
+    const { player, out, calls } = setup();
+    player.open({ id: "m1" });
+    expect(player.statusOf("m1")).toBe("loading");
+
+    player.append("m1", "Hello.");
+    player.end("m1");
     await flush();
-
-    audio.onerror?.();
+    calls[0].push(0.5);
+    calls[0].finish();
     await flush();
-    expect(deps.onError).toHaveBeenCalledWith("Couldn't play the reply aloud.");
-    expect(player.statusOf("m2")).toBe("playing");
-  });
+    expect(player.statusOf("m1")).toBe("playing");
 
-  it("stops and notifies when the browser blocks autoplay", async () => {
-    const { player, calls, audio, deps } = ctx;
-    const blocked = vi.fn();
-    const unsubscribe = player.onAutoplayBlocked(blocked);
-    const denied = new Error("denied");
-    denied.name = "NotAllowedError";
-    audio.play.mockRejectedValueOnce(denied);
-
-    player.enqueue({ id: "m1", text: "One." });
-    player.enqueue({ id: "m2", text: "Two." });
-    calls[0].resolve(blob("a"));
+    out.advance(1);
     await flush();
-
-    expect(deps.onError).toHaveBeenCalledWith(expect.stringMatching(/blocked audio playback/i));
-    expect(blocked).toHaveBeenCalledTimes(1);
     expect(player.statusOf("m1")).toBe("idle");
-    expect(player.statusOf("m2")).toBe("idle");
+  });
+
+  it("moves the playing status from one persona to the next", async () => {
+    const { player, out, calls } = setup();
+    player.enqueue({ id: "a", text: "A speaks." });
+    player.enqueue({ id: "b", text: "B speaks." });
+    await flush();
+    calls[0].push(0.5);
+    calls[1].push(0.5);
+    calls[0].finish();
+    calls[1].finish();
+    await flush();
+    expect(player.statusOf("a")).toBe("playing");
+    out.advance(0.6);
+    expect(player.statusOf("b")).toBe("playing");
+    expect(player.statusOf("a")).toBe("idle");
+  });
+
+  it("notifies subscribers", async () => {
+    const { player } = setup();
+    const listener = vi.fn();
+    const unsubscribe = player.subscribe(listener);
+    player.open({ id: "m1" });
+    expect(listener).toHaveBeenCalled();
     unsubscribe();
+    listener.mockClear();
+    player.stop();
+    expect(listener).not.toHaveBeenCalled();
   });
+});
 
-  it("reports other play() failures", async () => {
-    const { player, calls, audio, deps } = ctx;
-    audio.play.mockRejectedValueOnce(new Error("decode"));
-    player.enqueue({ id: "m1", text: "One." });
-    calls[0].resolve(blob("a"));
+describe("SpeechPlayer — cancelling", () => {
+  it("stop silences audio, aborts requests and reports nothing", async () => {
+    const { player, out, calls, onError } = setup();
+    player.enqueue({ id: "a", text: "First reply." });
+    player.enqueue({ id: "b", text: "Second reply." });
     await flush();
-    expect(deps.onError).toHaveBeenCalledWith("Couldn't play the reply aloud.");
-    expect(player.statusOf("m1")).toBe("idle");
-  });
-
-  it("stays quiet when play() is interrupted by a newer source", async () => {
-    const { player, calls, audio, deps } = ctx;
-    const interrupted = new Error("interrupted");
-    interrupted.name = "AbortError";
-    audio.play.mockRejectedValueOnce(interrupted);
-    player.enqueue({ id: "m1", text: "One." });
-    calls[0].resolve(blob("a"));
+    calls[0].push(1);
     await flush();
-    expect(deps.onError).not.toHaveBeenCalled();
-  });
 
-  it("prime plays a muted clip and pauses it when idle", async () => {
-    const { player, audio } = ctx;
-    player.prime();
-    expect(audio.muted).toBe(true);
-    expect(audio.src).toMatch(/^data:audio\/wav/);
+    player.stop();
     await flush();
-    expect(audio.pause).toHaveBeenCalled();
-    expect(audio.muted).toBe(false);
+    expect(out.sources.every((s) => s.stopped)).toBe(true);
+    expect(calls.every((c) => c.signal?.aborted)).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+    expect(player.statusOf("a")).toBe("idle");
   });
 
-  it("prime does nothing while a reply is being read", () => {
-    const { player, audio } = ctx;
-    player.enqueue({ id: "m1", text: "One." });
-    player.prime();
-    expect(audio.play).not.toHaveBeenCalled();
-  });
-
-  it("prime tolerates a rejected or synchronous play()", async () => {
-    const { player, audio } = ctx;
-    audio.play.mockRejectedValueOnce(new Error("no"));
-    player.prime();
+  it("works again after a stop", async () => {
+    const { player, calls, out } = setup();
+    player.enqueue({ id: "a", text: "Before." });
     await flush();
-    expect(audio.muted).toBe(false);
+    player.stop();
+    player.enqueue({ id: "b", text: "After." });
+    await flush();
+    const after = calls.find((c) => c.text === "After.")!;
+    after.push(0.2);
+    after.finish();
+    await flush();
+    expect(out.timeline).toEqual([[0.05, 0.2]]);
+  });
 
-    audio.play.mockImplementationOnce(() => undefined as unknown as Promise<void>);
-    player.prime();
-    expect(audio.muted).toBe(false);
+  it("discard drops one reply mid-play and moves on to the next", async () => {
+    const { player, out, calls, onError } = setup();
+    player.open({ id: "a" });
+    player.append("a", "Cut off mid ");
+    player.append("a", "sentence. ");
+    player.enqueue({ id: "b", text: "Next persona." });
+    await flush();
+    calls[0].push(0.5);
+    await flush();
 
-    audio.play.mockImplementationOnce(() => {
-      throw new Error("sync");
-    });
+    player.discard("a");
+    await flush();
+    expect(out.sources[0].stopped).toBe(true);
+    expect(calls[0].signal?.aborted).toBe(true);
+
+    calls[1].push(0.5);
+    calls[1].finish();
+    await flush();
+    expect(out.timeline.at(-1)?.[1]).toBe(0.5);
+    expect(player.statusOf("b")).toBe("playing");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("toggle stops the message being read, or plays another one", async () => {
+    const { player, calls } = setup();
+    player.toggle({ id: "a", text: "Hello." });
+    await flush();
+    calls[0].push(0.5);
+    await flush();
+    expect(player.statusOf("a")).toBe("playing");
+
+    player.toggle({ id: "a", text: "Hello." });
+    expect(player.statusOf("a")).toBe("idle");
+
+    player.toggle({ id: "b", text: "Other." });
+    expect(player.statusOf("b")).toBe("loading");
+  });
+});
+
+describe("SpeechPlayer — failures", () => {
+  it("reports a failed piece and keeps reading the rest", async () => {
+    const { player, out, calls, onError } = setup();
+    player.enqueue({ id: "a", text: "Broken." });
+    player.enqueue({ id: "b", text: "Fine." });
+    await flush();
+    calls[0].fail(new Error("Text to speech failed"));
+    calls[1].push(0.4);
+    calls[1].finish();
+    await flush();
+    expect(onError).toHaveBeenCalledWith("Text to speech failed");
+    expect(out.timeline).toEqual([[0.05, 0.4]]);
+  });
+
+  it("stops and notifies when the browser keeps audio suspended", async () => {
+    vi.useFakeTimers();
+    const { player, out, calls, onError } = setup();
+    out.state = "suspended";
+    out.resumable = false;
+    const blocked = vi.fn();
+    player.onAutoplayBlocked(blocked);
+
+    player.enqueue({ id: "a", text: "Hello." });
+    await vi.advanceTimersByTimeAsync(0);
+    calls[0].push(0.5);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/blocked audio/i));
+    expect(blocked).toHaveBeenCalled();
+    expect(player.statusOf("a")).toBe("idle");
+  });
+
+  it("resumes a suspended output before scheduling", async () => {
+    const { player, out, calls } = setup();
+    out.state = "suspended";
+    player.enqueue({ id: "a", text: "Hello." });
+    await flush();
+    calls[0].push(0.5);
+    await flush();
+    expect(out.resume).toHaveBeenCalled();
+    expect(out.timeline).toHaveLength(1);
+  });
+
+  it("reports when the browser has no Web Audio", async () => {
+    const { player, calls, onError, createOutput } = setup();
+    createOutput.mockReturnValue(null as unknown as FakeOutput);
+    player.enqueue({ id: "a", text: "Hello." });
+    await flush();
+    calls[0].push(0.5);
+    await flush();
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/can't play/i));
+  });
+});
+
+describe("SpeechPlayer — replay and priming", () => {
+  it("replays a message from cache without synthesizing again", async () => {
+    const { player, out, calls, synthesize } = setup();
+    player.enqueue({ id: "a", text: "Cache me.", speakerKey: "Ann", groupId: "g1" });
+    await flush();
+    calls[0].push(0.5);
+    calls[0].finish();
+    await flush();
+    out.advance(1);
+
+    player.toggle({ id: "a2", text: "Cache me.", speakerKey: "Ann", groupId: "g1" });
+    await flush();
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    expect(player.statusOf("a2")).toBe("playing");
+  });
+
+  it("does not share cached audio across groups", async () => {
+    const { player, calls, synthesize } = setup();
+    player.enqueue({ id: "a", text: "Same text.", speakerKey: "Ann", groupId: "g1" });
+    await flush();
+    calls[0].push(0.2);
+    calls[0].finish();
+    await flush();
+    player.stop();
+    player.enqueue({ id: "b", text: "Same text.", speakerKey: "Ann", groupId: "g2" });
+    await flush();
+    expect(synthesize).toHaveBeenCalledTimes(2);
+  });
+
+  it("prime resumes the output and starts a silent sound", () => {
+    const { player, out } = setup();
+    out.state = "suspended";
     player.prime();
-    expect(audio.muted).toBe(false);
+    expect(out.resume).toHaveBeenCalled();
+    expect(out.sources).toHaveLength(1);
+    expect(out.sources[0].startedAt).toBe(0);
+    expect(player.statusOf("anything")).toBe("idle");
+  });
+
+  it("prime tolerates a rejected resume", async () => {
+    const { player, out } = setup();
+    out.resume.mockRejectedValueOnce(new Error("nope"));
+    expect(() => player.prime()).not.toThrow();
+    await flush();
   });
 });

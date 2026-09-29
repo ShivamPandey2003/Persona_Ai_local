@@ -63,48 +63,6 @@ export const useStartGroupChat = () => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Broadcast a message to all personas                                */
-/* ------------------------------------------------------------------ */
-
-export type PersonaBroadcastReply = {
-  persona_id: string;
-  persona_name: string;
-  response: string;
-  evidence_tags: string[];
-  confidence_level?: string | null;
-  confidence_score?: number | null;
-};
-
-type BroadcastResponse = {
-  responses: PersonaBroadcastReply[];
-};
-
-/**
- * POST /v1/persona/group-chat/message (flow="message") — every persona replies.
- *
- * `fileIds` are the ids of images already presigned + uploaded for this turn
- * (see {@link uploadGroupImages}); they are attached to the persisted turn.
- */
-export const useGroupBroadcast = (groupId: string) => {
-  const token = getAuthToken();
-  return useMutation<
-    BroadcastResponse,
-    Error,
-    { message: string; fileIds?: string[] }
-  >({
-    mutationKey: ["GroupBroadcast", groupId],
-    mutationFn: ({ message, fileIds }) =>
-      postApi<BroadcastResponse>("persona/group-chat/message", {
-        token,
-        flow: "message",
-        group_id: groupId,
-        message,
-        ...(fileIds && fileIds.length > 0 ? { file_ids: fileIds } : {}),
-      }),
-  });
-};
-
-/* ------------------------------------------------------------------ */
 /* Image attachments (server-side / proxy upload)                     */
 /* ------------------------------------------------------------------ */
 
@@ -158,39 +116,6 @@ export async function uploadGroupImages(
 
   return uploaded.map((u) => u.file_id);
 }
-
-/* ------------------------------------------------------------------ */
-/* Message a single persona within the group                          */
-/* ------------------------------------------------------------------ */
-
-type SingleResponse = {
-  response: {
-    persona_name: string;
-    message: string;
-    confidence_level?: string | null;
-    confidence_score?: number | null;
-  };
-};
-
-/** POST /v1/persona/group-chat/message-single — drill into one persona. */
-export const useGroupMessageSingle = (groupId: string) => {
-  const token = getAuthToken();
-  return useMutation<
-    SingleResponse,
-    Error,
-    { personaId: string; message: string; fileIds?: string[] }
-  >({
-    mutationKey: ["GroupMessageSingle", groupId],
-    mutationFn: ({ personaId, message, fileIds }) =>
-      postApi<SingleResponse>("persona/group-chat/message-single", {
-        token,
-        group_id: groupId,
-        persona_id: personaId,
-        message,
-        ...(fileIds && fileIds.length > 0 ? { file_ids: fileIds } : {}),
-      }),
-  });
-};
 
 /* ------------------------------------------------------------------ */
 /* Shared assumptions / context                                       */

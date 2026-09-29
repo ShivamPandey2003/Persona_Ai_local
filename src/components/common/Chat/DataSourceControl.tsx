@@ -105,11 +105,12 @@ function DataSourceControl({
   return (
     <>
       <Button
-        size="sm"
-        variant={locked ? "ghost" : "outline"}
+        variant="outline"
         className={cn(
-          "h-7 shrink-0 gap-1.5 px-2 text-xs",
-          locked && "text-muted-foreground",
+          "shrink-0",
+          // Locked still reads as a chip (it records which data was used) but
+          // stops looking clickable.
+          locked && "cursor-default text-muted-foreground hover:bg-background hover:text-muted-foreground",
           // Unchosen is the chat's blocking state, so the chip asks rather than
           // reports, and is styled to be the obvious next thing to click.
           !selected && !locked && "border-primary/50 text-primary",
@@ -127,8 +128,10 @@ function DataSourceControl({
               : "Choose which data to build from"
         }
       >
-        <Database className="h-3.5 w-3.5" aria-hidden="true" />
-        {selected ? currentLabel : "Select data source"}
+        <Database aria-hidden="true" />
+        <span className="max-w-[40vw] truncate">
+          {selected ? currentLabel : "Select data source"}
+        </span>
       </Button>
 
       <Dialog

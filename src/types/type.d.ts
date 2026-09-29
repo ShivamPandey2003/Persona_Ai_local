@@ -137,6 +137,9 @@ declare type GroupMessageT = {
     id: string;
     role: "user" | "persona";
     message: string;
+    /** The replying persona (persona messages only). Matches a participant's
+     * `persona_id`, which is what "Reply" targets the composer at. */
+    persona_id?: string;
     persona_name?: string;
     evidence_tags?: string[];
     /** Per-answer confidence for a persona reply: level ("strong"/"medium"/"weak")

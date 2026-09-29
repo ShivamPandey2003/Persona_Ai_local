@@ -47,7 +47,7 @@ apiClient.interceptors.response.use(
     (error) => Promise.reject(error.response || error.message)
 );
 
-const handleSessionExpiration = (): void => {
+export const handleSessionExpiration = (): void => {
   sessionStorage.clear();
   localStorage.clear();
   window.location.href = "/"; // Redirect to login page

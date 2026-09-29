@@ -33,6 +33,9 @@ describe("NewAppSidebar", () => {
     expect(screen.getByText("Persona AI")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByText("Navigation")).toBeInTheDocument();
+    // Home is reached through the logo, so it has no entry of its own.
+    expect(screen.queryByRole("link", { name: /home/i })).not.toBeInTheDocument();
   });
 
   it("does not show chat actions outside of chat routes", () => {
@@ -54,7 +57,7 @@ describe("NewAppSidebar", () => {
     renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
 
     expect(screen.getByText("New chat")).toBeInTheDocument();
-    expect(screen.getByText("Start Group Chat")).toBeInTheDocument();
+    expect(screen.getByText("Start group chat")).toBeInTheDocument();
     // Recents come from the chat-list query.
     expect(await screen.findByText("Persona chat")).toBeInTheDocument();
   });
@@ -91,7 +94,88 @@ describe("NewAppSidebar", () => {
       pathname: "/chat/c1",
       state: { projectId: "p1" },
     });
-    await user.click(screen.getByText("Start Group Chat"));
+    await user.click(screen.getByText("Start group chat"));
     expect(store.getState().Project.personaDialog).toBe(true);
+  });
+
+  describe("chat search", () => {
+    const seedChats = () =>
+      server.use(
+        http.post(`${API_URL}persona/chat-list`, () =>
+          ok({
+            builder_chats: [
+              { conversation_id: "c1", project_id: "p1", status: "active", title: "Snack pricing", created_at: "2026-01-02T00:00:00Z" },
+              { conversation_id: "c2", project_id: "p1", status: "active", title: "Hydration drinks", created_at: "2026-01-01T00:00:00Z" },
+            ],
+            group_chats: [],
+          }),
+        ),
+      );
+
+    it("filters chats by title, case-insensitively", async () => {
+      seedChats();
+      const { user } = renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
+      await screen.findByText("Snack pricing");
+
+      await user.click(screen.getByRole("button", { name: "Search chats" }));
+      await user.type(screen.getByRole("textbox", { name: "Search chats" }), "  HYDRATION ");
+
+      expect(screen.getByText("Hydration drinks")).toBeInTheDocument();
+      expect(screen.queryByText("Snack pricing")).not.toBeInTheDocument();
+    });
+
+    it("says so when nothing matches", async () => {
+      seedChats();
+      const { user } = renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
+      await screen.findByText("Snack pricing");
+
+      await user.click(screen.getByRole("button", { name: "Search chats" }));
+      await user.type(screen.getByRole("textbox", { name: "Search chats" }), "zzz");
+
+      expect(screen.getByText("No chats match “zzz”")).toBeInTheDocument();
+    });
+
+    it("clears and closes on Escape, restoring the full list", async () => {
+      seedChats();
+      const { user } = renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
+      await screen.findByText("Snack pricing");
+
+      await user.click(screen.getByRole("button", { name: "Search chats" }));
+      const input = screen.getByRole("textbox", { name: "Search chats" });
+      expect(input).toHaveFocus();
+      await user.type(input, "snack{Escape}");
+
+      expect(screen.queryByRole("textbox", { name: "Search chats" })).not.toBeInTheDocument();
+      expect(screen.getByText("Snack pricing")).toBeInTheDocument();
+      expect(screen.getByText("Hydration drinks")).toBeInTheDocument();
+    });
+
+    it("offers no search when there are no chats", async () => {
+      server.use(
+        http.post(`${API_URL}persona/chat-list`, () => ok({ builder_chats: [], group_chats: [] })),
+      );
+      renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
+
+      expect(await screen.findByText("No chats yet")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Search chats" })).not.toBeInTheDocument();
+    });
+  });
+
+  it.each([
+    [/new chat/i, "Build a new persona"],
+    [/start group chat/i, "Chat with several personas at once"],
+  ])("explains %s on hover", async (name, hint) => {
+    server.use(
+      http.post(`${API_URL}persona/chat-list`, () => ok({ builder_chats: [], group_chats: [] })),
+    );
+    const { user } = renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
+
+    await user.hover(screen.getByRole("button", { name }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(hint);
+  });
+
+  it("disables New chat until a project is known", () => {
+    renderSidebar("/chat");
+    expect(screen.getByRole("button", { name: /new chat/i })).toBeDisabled();
   });
 });

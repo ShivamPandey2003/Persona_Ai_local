@@ -18,6 +18,7 @@ import ChatScrollButton from "./ChatScrollButton";
 import PersonaBuildProgress from "./PersonaBuildProgress";
 import DataSourceControl from "./DataSourceControl";
 import { Button } from "@/components/ui/button";
+import { PageHeaderActions, PageHeaderTitle } from "@/components/global/PageHeader";
 import { GradientRingLoader } from "@/components/ui/loader";
 
 import { useBuilderHistory, useChatList } from "@/api/Chat/query";
@@ -29,9 +30,18 @@ import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
 import { getSession, touchSession } from "@/lib/chatStore";
 import { cn } from "@/lib/utils";
+import { CHAT_COLUMN } from "./chatLayout";
 import { setPersonaDialog } from "@/redux/ProjectSlice";
 import type { AppDispatch } from "@/redux/store";
 import { queryClient } from "@/provider";
+
+// Status lines while the persona builder works on a reply.
+const BUILDER_THINKING = [
+  "Reading your message…",
+  "Looking at your project data…",
+  "Working out the next step…",
+  "Writing a reply…",
+] as const;
 
 function snippet(text: string, words = 6): string {
   return text.split(/\s+/).slice(0, words).join(" ");
@@ -83,6 +93,10 @@ function ConversationPromptInput() {
   );
   const ended =
     endedLocal || serverEnded || (getSession(conversationId)?.ended ?? false);
+  // Shown in the top bar as "project › chat title".
+  const chatTitle = chatList?.find(
+    (c) => c.kind === "builder" && c.id === conversationId,
+  )?.title;
 
   // The composer stays locked until the user says which data to build from. The
   // choice decides what every persona here is evidenced from and freezes when
@@ -268,47 +282,46 @@ function ConversationPromptInput() {
 
   return (
     <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden duration-300 animate-in fade-in">
-      {/* Toolbar: status, the dataset this build reads, and a shortcut to the
-          personas dashboard. Personas also open automatically once the build
-          completes. */}
-      <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center justify-between gap-4 px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            {buildAnnounce
-              ? "Building personas…"
-              : ended
-                ? "Personas ready"
-                : "Persona Builder"}
-          </span>
-          {/* Which data the personas are evidenced from. Changeable until the
-              build is dispatched, then a read-only record of the choice. */}
-          {conversationId && history.dataSource && (
-            <DataSourceControl
-              conversationId={conversationId}
-              projectId={projectId}
-              value={history.dataSource}
-              selected={history.dataSourceSelected}
-              locked={history.dataSourceLocked || ended}
-              onChanged={history.setDataSource}
-              open={pickerOpen}
-              onOpenChange={setPickerOpen}
-            />
-          )}
-        </div>
+      {/* Top bar: the chat's name and build status, the dataset this build
+          reads, and a shortcut to the personas dashboard. Personas also open
+          automatically once the build completes. */}
+      <PageHeaderTitle
+        title={chatTitle}
+        status={
+          buildAnnounce
+            ? { label: "Building personas…", tone: "progress" }
+            : ended
+              ? { label: "Personas ready", tone: "success" }
+              : undefined
+        }
+      />
+      <PageHeaderActions>
+        {/* Which data the personas are evidenced from. Changeable until the
+            build is dispatched, then a read-only record of the choice. */}
+        {conversationId && history.dataSource && (
+          <DataSourceControl
+            conversationId={conversationId}
+            projectId={projectId}
+            value={history.dataSource}
+            selected={history.dataSourceSelected}
+            locked={history.dataSourceLocked || ended}
+            onChanged={history.setDataSource}
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+          />
+        )}
         <Button
-          size="sm"
-          variant="outline"
+          variant="inverse"
           onClick={openPersonaPanel}
+          aria-label="View personas"
           className={cn(
-            "shrink-0",
-            personasReady &&
-              "border-primary/40 text-primary animate-[success-pulse_1.4s_ease-out_infinite]",
+            personasReady && "animate-[success-pulse_1.4s_ease-out_infinite]",
           )}
         >
-          <Users className="mr-1.5 h-4 w-4" />
-          View Personas
+          <Users aria-hidden="true" />
+          <span className="hidden sm:inline">View personas</span>
         </Button>
-      </div>
+      </PageHeaderActions>
 
       <ChatContainerRoot
         contextRef={stbRef}
@@ -334,7 +347,9 @@ function ConversationPromptInput() {
             />
           ))}
 
-          {messageMut.isPending && <LoadingMessage />}
+          {messageMut.isPending && (
+            <LoadingMessage phrases={BUILDER_THINKING} label="Persona builder is replying" />
+          )}
 
           {/* Live build progress once requirements are complete. */}
           {queryJobId && (
@@ -372,7 +387,10 @@ function ConversationPromptInput() {
       {needsDataSource && (
         <div
           role="status"
-          className="mx-auto mb-2 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 px-5 text-center text-xs text-muted-foreground"
+          className={cn(
+            CHAT_COLUMN,
+            "mb-2 flex flex-wrap items-center justify-center gap-2 px-5 text-center text-xs text-muted-foreground",
+          )}
         >
           <Database className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
           <span>Choose which data to build these personas from to get started.</span>

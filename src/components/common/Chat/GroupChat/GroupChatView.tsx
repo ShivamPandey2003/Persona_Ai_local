@@ -27,8 +27,10 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { PageHeaderActions, PageHeaderTitle } from "@/components/global/PageHeader";
 import { GradientRingLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
+import { CHAT_COLUMN } from "../chatLayout";
 import { personaColorStyle, personaInitials } from "@/lib/personaColors";
 
 import LoadingMessage from "../LoadingMessage";
@@ -49,11 +51,10 @@ import {
 } from "@/api/GroupChat/query";
 import { useChatList } from "@/api/Chat/query";
 import {
-  useGroupBroadcast,
-  useGroupMessageSingle,
   useDownloadGroupInsights,
   uploadGroupImages,
 } from "@/api/GroupChat/mutation";
+import { useGroupChatStream } from "@/api/GroupChat/useGroupChatStream";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useLoadOlderOnScroll } from "@/hooks/useLoadOlderOnScroll";
 import {
@@ -61,7 +62,6 @@ import {
   IMAGE_ACCEPT,
   MAX_IMAGES,
 } from "@/hooks/useImageAttachments";
-import { touchSession } from "@/lib/chatStore";
 import { useVoiceConfig } from "@/api/Voice/voice";
 import { useMicRecorder } from "@/hooks/useMicRecorder";
 import { useSpeakerPreference } from "@/hooks/useSpeakerPreference";
@@ -72,13 +72,62 @@ const ALL = "all";
 // Per-message "read aloud" button hidden for now — flip to true to bring it back.
 const PER_MESSAGE_SPEAKER_BUTTON_ENABLED = false;
 
-type PersonaReply = {
-  persona_name: string;
-  response: string;
-  evidence_tags?: string[];
-  confidence_level?: string | null;
-  confidence_score?: number | null;
-};
+// Status lines under the replies while personas are still to start answering.
+const REPLY_THINKING = [
+  "Reading your question…",
+  "Thinking it over…",
+  "Checking what the data says…",
+  "Putting thoughts into words…",
+] as const;
+// Images go up before the question is sent.
+const UPLOAD_THINKING = ["Uploading your images…"] as const;
+
+// Avatars shown in the recipient pill before it collapses the rest into "+N".
+const RECIPIENT_AVATAR_LIMIT = 3;
+
+const RECIPIENT_AVATAR =
+  "flex size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ring-2 ring-popover";
+
+// Quiet icon buttons on the right of the composer, before send.
+const COMPOSER_TOOL =
+  "size-9 shrink-0 rounded-lg text-muted-foreground hover:text-foreground";
+
+/**
+ * The avatar stack inside the recipient pill when messaging everyone. Phones
+ * get just the first avatar so the pill and the composer tools share one row.
+ */
+function RecipientAvatars({ participants }: { participants: GroupParticipant[] }) {
+  if (participants.length === 0) {
+    return (
+      <span className={cn(RECIPIENT_AVATAR, "bg-primary/10 text-primary")} aria-hidden="true">
+        <Users className="size-3.5" />
+      </span>
+    );
+  }
+  const shown = participants.slice(0, RECIPIENT_AVATAR_LIMIT);
+  const extra = participants.length - shown.length;
+  return (
+    <span className="flex -space-x-1.5" aria-hidden="true">
+      {shown.map((p, i) => (
+        <span
+          key={p.persona_id}
+          className={cn(
+            RECIPIENT_AVATAR,
+            personaColorStyle(p.color).avatar,
+            i > 0 && "max-sm:hidden",
+          )}
+        >
+          {personaInitials(p.persona_name)}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className={cn(RECIPIENT_AVATAR, "bg-muted text-muted-foreground max-sm:hidden")}>
+          +{extra}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function GroupChatView() {
   const { groupId } = useParams();
@@ -95,9 +144,6 @@ function GroupChatView() {
   // backend name the chat. Drives the Recents poll for that name (see below).
   const [awaitingTitle, setAwaitingTitle] = useState<string | null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
-  // True while a broadcast's persona replies are being revealed one-by-one.
-  const [isRevealing, setIsRevealing] = useState(false);
-  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Image attachments (broadcast-only) staged in the composer.
   const attachments = useImageAttachments();
@@ -107,20 +153,20 @@ function GroupChatView() {
   // Subscribed purely to rename the Recents entry once the backend has named
   // this chat: the list is shared cache, so the sidebar renders the new name
   // without knowing a poll happened.
-  useChatList(projectId, { awaitTitleFor: awaitingTitle ?? undefined });
+  const { data: chatList } = useChatList(projectId, {
+    awaitTitleFor: awaitingTitle ?? undefined,
+  });
+  // Shown in the top bar as "project › chat title".
+  const chatTitle = chatList?.find((c) => c.kind === "group" && c.id === groupId)?.title;
 
   const participantsQuery = useGroupChatParticipants(groupId);
-  const broadcastMut = useGroupBroadcast(groupId ?? "");
-  const singleMut = useGroupMessageSingle(groupId ?? "");
   const insightsMut = useDownloadGroupInsights(groupId ?? "");
   // Read only: the dialog owns every write. Shared cache key, so applying or
   // removing an assumption in there refreshes this badge with no extra request.
   const assumptionsQuery = useGroupAssumptions(groupId);
   const assumptionCount = assumptionsQuery.data?.assumptions.length ?? 0;
 
-  const participants = participantsQuery.data ?? [];
-  const sending =
-    broadcastMut.isPending || singleMut.isPending || isRevealing || uploading;
+  const participants = useMemo(() => participantsQuery.data ?? [], [participantsQuery.data]);
 
   // Replies can land after the user has moved to another group chat (the view
   // is reused across routes); they must not be shown or spoken there.
@@ -137,21 +183,14 @@ function GroupChatView() {
   const maxRecordingSeconds = voiceConfig?.limits?.max_recording_seconds;
   const [readAloudPref, setReadAloudPref] = useSpeakerPreference();
   const readAloud = ttsEnabled && readAloudPref;
-  // Read inside reveal timers, which outlive the render that scheduled them.
-  const readAloudRef = useRef(readAloud);
-  useEffect(() => {
-    readAloudRef.current = readAloud;
-  }, [readAloud]);
+
+  // Persona replies stream into `liveMessages` token by token.
+  const stream = useGroupChatStream({ setLiveMessages, readAloud });
+  const sending = stream.isStreaming || uploading;
 
   const messages = useMemo(
     () => [...history.messages, ...liveMessages],
     [history.messages, liveMessages],
-  );
-
-  // Replies received this session typewriter-reveal; history does not.
-  const liveIds = useMemo(
-    () => new Set(liveMessages.map((m) => m.id)),
-    [liveMessages],
   );
 
   const colorByName = useMemo(() => {
@@ -159,6 +198,35 @@ function GroupChatView() {
     participants.forEach((p) => (map[p.persona_name] = p.color));
     return map;
   }, [participants]);
+
+  // Personas a reply can be addressed to: current participants not marked
+  // inactive (a missing flag counts as active). Keyed by id, with a by-name
+  // fallback for messages that carry no id — used only when the name is unique.
+  const replyTargets = useMemo(() => {
+    const byId = new Set<string>();
+    const byName = new Map<string, string>();
+    const ambiguous = new Set<string>();
+    participants.forEach((p) => {
+      if (p.active === false) return;
+      byId.add(p.persona_id);
+      if (byName.has(p.persona_name)) ambiguous.add(p.persona_name);
+      else byName.set(p.persona_name, p.persona_id);
+    });
+    ambiguous.forEach((name) => byName.delete(name));
+    return { byId, byName };
+  }, [participants]);
+
+  /** The participant a persona message can be replied to, if any. */
+  const replyTargetOf = useCallback(
+    (message: GroupMessageT): string | undefined => {
+      if (message.role !== "persona") return undefined;
+      if (message.persona_id) {
+        return replyTargets.byId.has(message.persona_id) ? message.persona_id : undefined;
+      }
+      return message.persona_name ? replyTargets.byName.get(message.persona_name) : undefined;
+    },
+    [replyTargets],
+  );
 
   // Edit: load a previous message's text back into the composer, then focus the
   // textarea (caret at the end) so it can be tweaked and re-sent.
@@ -189,25 +257,19 @@ function GroupChatView() {
     setTarget(ALL);
     setEnded(false);
     setAwaitingTitle(null);
-    setIsRevealing(false);
     setUploading(false);
     attachments.clear();
-    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    // The server still finishes and saves a turn whose stream is dropped here.
+    stream.cancel();
     speechPlayer.stop();
     mic.cancel();
-    // attachments.clear and mic.cancel are stable; intentionally keyed on groupId only.
+    // attachments.clear, stream.cancel and mic.cancel are stable; intentionally
+    // keyed on groupId only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
 
-
-  // Clear any pending reveal timer and stop reading aloud on unmount.
-  useEffect(
-    () => () => {
-      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-      speechPlayer.stop();
-    },
-    [],
-  );
+  // Stop reading aloud on unmount (the stream hook drops its own turn).
+  useEffect(() => () => speechPlayer.stop(), []);
 
   // The browser refused to play without a fresh click: turn auto-read off so
   // it doesn't keep failing; the user can switch it back on.
@@ -270,6 +332,18 @@ function GroupChatView() {
     [focusComposer],
   );
 
+  // Reply: address the next message to that persona (the recipient picker
+  // shows who it goes to) and put the caret in the composer. The draft is kept.
+  const handleReply = useCallback(
+    (message: GroupMessageT) => {
+      const personaId = replyTargetOf(message);
+      if (!personaId) return;
+      setTarget(personaId);
+      focusComposer();
+    },
+    [replyTargetOf, focusComposer],
+  );
+
   const appendLive = (next: GroupMessageT[]) =>
     setLiveMessages((prev) => [...prev, ...next]);
 
@@ -287,68 +361,9 @@ function GroupChatView() {
     e.target.value = "";
   };
 
-  /**
-   * Reveal a broadcast's persona replies one-by-one instead of all at once:
-   * each reply is appended (and typewriters in), then the next is scheduled
-   * after roughly that reply's typing duration, so it feels like a real
-   * back-and-forth rather than a wall of simultaneous answers.
-   */
-  // Only reached for replies to the chat still on screen (stale ones are
-  // dropped first), so the ref is the group the reply belongs to.
-  const speakIfReadingAloud = (message: GroupMessageT) => {
-    if (!readAloudRef.current) return;
-    speechPlayer.enqueue({
-      id: message.id,
-      text: message.message,
-      speakerKey: message.persona_name,
-      groupId: groupIdRef.current,
-    });
-  };
-
-  const revealSequentially = (responses: PersonaReply[]) => {
-    if (responses.length === 0) return;
-    const replies: GroupMessageT[] = responses.map((r) => ({
-      id: crypto.randomUUID(),
-      role: "persona",
-      persona_name: r.persona_name,
-      message: r.response,
-      evidence_tags: r.evidence_tags,
-      confidence_level: r.confidence_level,
-      confidence_score: r.confidence_score,
-    }));
-    // Synthesize ahead so each reply can be heard as soon as its bubble appears.
-    if (readAloudRef.current) {
-      replies.forEach((m) =>
-        speechPlayer.prefetch({
-          text: m.message,
-          speakerKey: m.persona_name,
-          groupId: groupIdRef.current,
-        }),
-      );
-    }
-    setIsRevealing(true);
-    let i = 0;
-    const step = () => {
-      const reply = replies[i];
-      appendLive([reply]);
-      // Queued as it's revealed, so audio never runs ahead of the text.
-      speakIfReadingAloud(reply);
-      const r = responses[i];
-      i += 1;
-      if (i < responses.length) {
-        const words = (r.response.match(/\S+\s*/g) ?? []).length;
-        const delay = Math.min(words * 24 + 500, 4500);
-        revealTimerRef.current = setTimeout(step, delay);
-      } else {
-        setIsRevealing(false);
-      }
-    };
-    step();
-  };
-
-  const handleSendError = (err: Error) => {
-    if (/ended/i.test(err.message)) setEnded(true);
-  };
+  const selectedParticipant = participants.find((p) => p.persona_id === target);
+  const targetName =
+    target === ALL ? "Everyone" : selectedParticipant?.persona_name;
 
   const handleSend = () => {
     const text = input.trim();
@@ -360,6 +375,9 @@ function GroupChatView() {
 
     // A new question interrupts whatever is still being read aloud.
     speechPlayer.stop();
+    // Sending is a user gesture: unlock audio now, so replies that arrive
+    // later (outside any gesture) may play.
+    if (readAloud) speechPlayer.prime();
     const sentGroupId = groupId;
     const isCurrentGroup = () => groupIdRef.current === sentGroupId;
 
@@ -379,48 +397,20 @@ function GroupChatView() {
 
     // Send the turn once any images are uploaded. Broadcast (Everyone) and a
     // single-persona message both accept attachments.
-    const sendToServer = (fileIds?: string[]) => {
-      if (target === ALL) {
-        broadcastMut.mutate(
-          { message: text, fileIds },
-          {
-            onSuccess: (data) => {
-              touchSession(sentGroupId);
-              if (!isCurrentGroup()) return;
-              revealSequentially(data.responses);
-              if (isFirstUserMessage) setAwaitingTitle(sentGroupId);
-            },
-            onError: (err) => {
-              if (isCurrentGroup()) handleSendError(err);
-            },
-          },
-        );
-      } else {
-        singleMut.mutate(
-          { personaId: target, message: text, fileIds },
-          {
-            onSuccess: (data) => {
-              touchSession(sentGroupId);
-              if (!isCurrentGroup()) return;
-              const reply: GroupMessageT = {
-                id: crypto.randomUUID(),
-                role: "persona",
-                persona_name: data.response.persona_name,
-                message: data.response.message,
-                confidence_level: data.response.confidence_level,
-                confidence_score: data.response.confidence_score,
-              };
-              appendLive([reply]);
-              speakIfReadingAloud(reply);
-              if (isFirstUserMessage) setAwaitingTitle(sentGroupId);
-            },
-            onError: (err) => {
-              if (isCurrentGroup()) handleSendError(err);
-            },
-          },
-        );
-      }
-    };
+    const sendToServer = (fileIds?: string[]) =>
+      stream.send({
+        groupId: sentGroupId,
+        message: text,
+        personaId: target === ALL ? undefined : target,
+        fileIds,
+        isCurrentGroup,
+        onSaved: () => {
+          if (isFirstUserMessage) setAwaitingTitle(sentGroupId);
+        },
+        onFailed: (message) => {
+          if (/ended/i.test(message)) setEnded(true);
+        },
+      });
 
     if (staged.length === 0) {
       sendToServer();
@@ -447,9 +437,6 @@ function GroupChatView() {
       .finally(() => setUploading(false));
   };
 
-  const selectedParticipant = participants.find((p) => p.persona_id === target);
-  const targetName =
-    target === ALL ? "Everyone" : selectedParticipant?.persona_name;
   const canAttach =
     !ended && !sending && !micBusy && attachments.items.length < MAX_IMAGES;
 
@@ -465,39 +452,45 @@ function GroupChatView() {
 
   return (
     <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden duration-300 animate-in fade-in">
-      {/* Header: participants + actions */}
-      <div className="mx-auto flex w-full max-w-3xl shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2">
+      <PageHeaderTitle
+        title={chatTitle}
+        status={ended ? { label: "Ended", tone: "neutral" } : undefined}
+      />
+      <PageHeaderActions>
         <GroupParticipants participants={participants} projectId={projectId} />
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={micBusy}
-            onClick={() => setAssumptionsOpen(true)}
-          >
-            <SlidersHorizontal className="mr-1.5 h-4 w-4" />
-            Assumptions
-            {assumptionCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
-                {assumptionCount}
-              </span>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={insightsMut.isPending || sending || messages.length === 0}
-            onClick={() => insightsMut.mutate()}
-          >
-            {insightsMut.isPending ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="mr-1.5 h-4 w-4" />
-            )}
+        <Button
+          variant="outline"
+          disabled={micBusy}
+          onClick={() => setAssumptionsOpen(true)}
+          // The label is hidden on narrow screens; keep the button named.
+          aria-label={
+            assumptionCount > 0 ? `Assumptions (${assumptionCount} applied)` : "Assumptions"
+          }
+        >
+          <SlidersHorizontal aria-hidden="true" />
+          <span className="hidden sm:inline">Assumptions</span>
+          {assumptionCount > 0 && (
+            <span className="rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
+              {assumptionCount}
+            </span>
+          )}
+        </Button>
+        <Button
+          variant="inverse"
+          disabled={insightsMut.isPending || sending || messages.length === 0}
+          onClick={() => insightsMut.mutate()}
+          aria-label={insightsMut.isPending ? "Preparing insights…" : "Download insights"}
+        >
+          {insightsMut.isPending ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Download aria-hidden="true" />
+          )}
+          <span className="hidden sm:inline">
             {insightsMut.isPending ? "Preparing insights…" : "Download insights"}
-          </Button>
-        </div>
-      </div>
+          </span>
+        </Button>
+      </PageHeaderActions>
 
       <ChatContainerRoot
         contextRef={stbRef}
@@ -514,7 +507,7 @@ function GroupChatView() {
           {history.isInitialLoading ? (
             <ChatHistorySkeleton />
           ) : messages.length === 0 ? (
-            <p className="mx-auto w-full max-w-3xl px-10 text-center text-sm text-muted-foreground">
+            <p className={cn(CHAT_COLUMN, "px-10 text-center text-sm text-muted-foreground")}>
               Ask a question to hear from {participants.length || "your"} personas.
             </p>
           ) : (
@@ -528,13 +521,24 @@ function GroupChatView() {
                     : undefined
                 }
                 onEdit={ended || micBusy ? undefined : handleEditMessage}
-                animate={liveIds.has(message.id)}
+                // Same locks as the recipient picker, plus a persona that can
+                // still be messaged.
+                onReply={
+                  !ended && !micBusy && replyTargetOf(message) ? handleReply : undefined
+                }
                 onSpeak={PER_MESSAGE_SPEAKER_BUTTON_ENABLED && ttsEnabled ? handleSpeak : undefined}
               />
             ))
           )}
 
-          {sending && <LoadingMessage />}
+          {/* While images upload, then until the first persona's reply
+              appears. */}
+          {(uploading || stream.isWaiting) && (
+            <LoadingMessage
+              phrases={uploading ? UPLOAD_THINKING : REPLY_THINKING}
+              label={uploading ? "Uploading images" : "Personas are replying"}
+            />
+          )}
 
           <ChatScrollButton />
         </ChatContainerContent>
@@ -589,102 +593,28 @@ function GroupChatView() {
           ) : undefined
         }
         leftSlot={
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={IMAGE_ACCEPT}
-              multiple
-              hidden
-              onChange={handlePickFiles}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-9 shrink-0 rounded-full"
-              disabled={!canAttach}
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach images"
-              title="Attach images"
-            >
-              <ImagePlus size={18} />
-            </Button>
-            {sttEnabled && mic.supported && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "relative size-9 shrink-0 rounded-full",
-                  mic.status === "recording" &&
-                    "bg-destructive/10 text-destructive ring-2 ring-destructive/30 hover:bg-destructive/15 hover:text-destructive",
-                )}
-                disabled={
-                  ended || mic.status === "requesting" || mic.status === "transcribing"
-                }
-                onClick={handleMicClick}
-                aria-label={
-                  mic.status === "recording"
-                    ? "Stop recording"
-                    : mic.status === "transcribing"
-                      ? "Transcribing"
-                      : "Record voice message"
-                }
-                aria-pressed={mic.status === "recording"}
-                title={mic.status === "recording" ? "Stop recording" : "Record voice message"}
-              >
-                {mic.status === "transcribing" || mic.status === "requesting" ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : mic.status === "recording" ? (
-                  <Square size={14} className="animate-pulse fill-current" />
-                ) : (
-                  <Mic size={18} />
-                )}
-              </Button>
-            )}
-            {ttsEnabled && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "size-9 shrink-0 rounded-full",
-                  readAloudPref && "text-primary",
-                )}
-                disabled={micBusy}
-                onClick={handleToggleReadAloud}
-                aria-label={readAloudPref ? "Stop reading replies aloud" : "Read replies aloud"}
-                aria-pressed={readAloudPref}
-                title={readAloudPref ? "Reading replies aloud" : "Read replies aloud"}
-              >
-                {readAloudPref ? <Volume2 size={18} /> : <VolumeX size={18} />}
-              </Button>
-            )}
-            <Select value={target} onValueChange={setTarget} disabled={ended || micBusy}>
+          <Select value={target} onValueChange={setTarget} disabled={ended || micBusy}>
             <SelectTrigger
-              size="sm"
               aria-label="Choose who to message"
-              className="max-w-[210px] gap-2 pl-1.5"
+              className="min-w-0 max-w-[240px] gap-2 rounded-full border-primary/15 bg-primary/5 py-1 pl-1.5 pr-3 text-primary hover:bg-primary/10 data-[size=default]:h-9 dark:bg-primary/10 dark:hover:bg-primary/15 [&>svg]:text-primary/70"
             >
               {target === ALL ? (
-                <span className="flex items-center gap-1.5">
-                  <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Users className="size-3" />
-                  </span>
-                  <span className="text-xs font-medium">Everyone</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <RecipientAvatars participants={participants} />
+                  <span className="truncate text-sm font-semibold">Everyone</span>
                 </span>
               ) : (
-                <span className="flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-2">
                   <span
                     className={cn(
-                      "flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold",
+                      RECIPIENT_AVATAR,
                       personaColorStyle(selectedParticipant?.color).avatar,
                     )}
+                    aria-hidden="true"
                   >
                     {personaInitials(selectedParticipant?.persona_name)}
                   </span>
-                  <span className="truncate text-xs font-medium">
+                  <span className="truncate text-sm font-semibold">
                     {selectedParticipant?.persona_name}
                   </span>
                 </span>
@@ -721,7 +651,82 @@ function GroupChatView() {
                 </SelectItem>
               ))}
             </SelectContent>
-            </Select>
+          </Select>
+        }
+        rightSlot={
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              multiple
+              hidden
+              onChange={handlePickFiles}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={COMPOSER_TOOL}
+              disabled={!canAttach}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach images"
+              title="Attach images"
+            >
+              <ImagePlus size={18} />
+            </Button>
+            {sttEnabled && mic.supported && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  COMPOSER_TOOL,
+                  "relative",
+                  mic.status === "recording" &&
+                    "bg-destructive/10 text-destructive ring-2 ring-destructive/30 hover:bg-destructive/15 hover:text-destructive",
+                )}
+                disabled={
+                  ended || mic.status === "requesting" || mic.status === "transcribing"
+                }
+                onClick={handleMicClick}
+                aria-label={
+                  mic.status === "recording"
+                    ? "Stop recording"
+                    : mic.status === "transcribing"
+                      ? "Transcribing"
+                      : "Record voice message"
+                }
+                aria-pressed={mic.status === "recording"}
+                title={mic.status === "recording" ? "Stop recording" : "Record voice message"}
+              >
+                {mic.status === "transcribing" || mic.status === "requesting" ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : mic.status === "recording" ? (
+                  <Square size={14} className="animate-pulse fill-current" />
+                ) : (
+                  <Mic size={18} />
+                )}
+              </Button>
+            )}
+            {ttsEnabled && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  COMPOSER_TOOL,
+                  readAloudPref && "text-primary hover:text-primary",
+                )}
+                disabled={micBusy}
+                onClick={handleToggleReadAloud}
+                aria-label={readAloudPref ? "Stop reading replies aloud" : "Read replies aloud"}
+                aria-pressed={readAloudPref}
+                title={readAloudPref ? "Reading replies aloud" : "Read replies aloud"}
+              >
+                {readAloudPref ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </Button>
+            )}
           </>
         }
       />

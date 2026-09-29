@@ -50,4 +50,24 @@ describe("ChatComposer", () => {
     setup({ value: "hello", isSending: true });
     expect(screen.getByRole("button")).toBeDisabled();
   });
+
+  it("renders tools beside the send button without submitting", async () => {
+    const onSubmit = vi.fn();
+    const onTool = vi.fn();
+    const { user } = setup({
+      value: "hello",
+      onSubmit,
+      rightSlot: (
+        <button type="button" onClick={onTool}>
+          Attach
+        </button>
+      ),
+    });
+    await user.click(screen.getByRole("button", { name: "Attach" }));
+    expect(onTool).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
 });

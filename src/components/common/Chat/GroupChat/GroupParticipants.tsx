@@ -259,17 +259,20 @@ function GroupParticipants({ participants, projectId }: GroupParticipantsProps) 
 
   return (
     <>
-      <div className="flex min-w-0 items-center gap-2">
-        <div className="flex items-center -space-x-2">
+      {/* One pill: overlapping avatars (each opens that persona) and the count
+          (opens the full list). Sized to sit in the page's top bar. */}
+      <div className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-muted/40 py-0.5 pl-1 pr-3">
+        <div className="flex items-center -space-x-1.5">
           {visible.map((p) => (
             <Tooltip key={p.persona_id}>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   onClick={() => openPersona(p.persona_id)}
-                  className="rounded-full transition-transform hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:outline-none"
+                  aria-label={`View ${p.persona_name}`}
+                  className="rounded-full transition-transform hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <PersonaAvatar participant={p} />
+                  <PersonaAvatar participant={p} className="h-6 w-6 text-[9px]" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>{p.persona_name}</TooltipContent>
@@ -280,7 +283,7 @@ function GroupParticipants({ participants, projectId }: GroupParticipantsProps) 
               type="button"
               onClick={openList}
               aria-label={`Show all ${participants.length} participants`}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground ring-2 ring-background transition-colors hover:bg-muted/70"
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[9px] font-semibold text-muted-foreground ring-2 ring-background transition-colors hover:bg-muted/70"
             >
               +{overflow}
             </button>
@@ -289,7 +292,7 @@ function GroupParticipants({ participants, projectId }: GroupParticipantsProps) 
         <button
           type="button"
           onClick={openList}
-          className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="whitespace-nowrap text-xs font-medium text-foreground/80 transition-colors hover:text-foreground"
         >
           {participants.length}{" "}
           {participants.length === 1 ? "persona" : "personas"}

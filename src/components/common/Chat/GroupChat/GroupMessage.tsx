@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { Check, Copy, Info, Loader2, Pencil, Square, Volume2 } from "lucide-react";
+import { Check, Copy, Info, Loader2, Pencil, Reply, Square, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import {
   MessageContent,
 } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
-import { useTypewriter } from "@/hooks/useTypewriter";
+import { CHAT_COLUMN } from "../chatLayout";
 import { useSpeechStatus } from "@/hooks/useSpeechStatus";
 import { personaColorStyle, personaInitials } from "@/lib/personaColors";
 import {
@@ -54,8 +54,12 @@ type GroupMessageProps = {
    * message text back into the composer so it can be edited and re-sent.
    */
   onEdit?: (text: string) => void;
-  /** Typewriter-reveal this message (a freshly received persona reply). */
-  animate?: boolean;
+  /**
+   * When provided (persona replies only), shows a Reply action that addresses
+   * the next message to this persona. The view omits it when that persona
+   * can't be messaged. Keep it referentially stable so memoization holds.
+   */
+  onReply?: (message: GroupMessageT) => void;
   /**
    * When provided (persona replies only), shows a Play/Stop action that reads
    * the reply aloud. Keep it referentially stable so memoization holds.
@@ -142,12 +146,36 @@ function SpeakAction({
   );
 }
 
+/** Addresses the next message to the persona who wrote this reply. */
+function ReplyAction({
+  message,
+  onReply,
+}: {
+  message: GroupMessageT;
+  onReply: (message: GroupMessageT) => void;
+}) {
+  const name = message.persona_name?.trim();
+  const label = name ? `Reply to ${name}` : "Reply";
+  return (
+    <MessageAction tooltip={label} delayDuration={100}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="rounded-full"
+        aria-label={label}
+        onClick={() => onReply(message)}
+      >
+        <Reply aria-hidden="true" />
+      </Button>
+    </MessageAction>
+  );
+}
+
 /** Renders one group-chat turn: a right-aligned user bubble or a labelled persona reply. */
 const GroupMessage = memo(
-  ({ message, color, onEdit, animate, onSpeak }: GroupMessageProps) => {
+  ({ message, color, onEdit, onReply, onSpeak }: GroupMessageProps) => {
     const isUser = message.role === "user";
     const [copied, setCopied] = useState(false);
-    const shown = useTypewriter(message.message, Boolean(animate) && !isUser);
     const confidence = parseConfidence(message.confidence_level ?? "");
 
     const handleCopy = async () => {
@@ -166,6 +194,7 @@ const GroupMessage = memo(
           variant="ghost"
           size="icon"
           className="rounded-full"
+          aria-label={copied ? "Copied" : "Copy"}
           onClick={handleCopy}
         >
           {copied ? <Check className="text-emerald-600" /> : <Copy />}
@@ -175,7 +204,12 @@ const GroupMessage = memo(
 
     if (isUser) {
       return (
-        <Message className="group mx-auto flex w-full max-w-3xl flex-col items-end gap-1 px-2 duration-300 animate-in fade-in slide-in-from-right-2 md:px-10">
+        <Message
+          className={cn(
+            CHAT_COLUMN,
+            "group flex flex-col items-end gap-1 px-2 duration-300 animate-in fade-in slide-in-from-right-2 md:px-10",
+          )}
+        >
           {message.images && message.images.length > 0 && (
             <div className="flex max-w-[85%] flex-wrap justify-end gap-2 sm:max-w-[75%]">
               {message.images.map((img, i) => (
@@ -221,7 +255,12 @@ const GroupMessage = memo(
     const style = personaColorStyle(color);
 
     return (
-      <Message className="group mx-auto flex w-full max-w-3xl flex-row items-start gap-3 px-2 duration-300 animate-in fade-in slide-in-from-left-2 md:px-10">
+      <Message
+        className={cn(
+          CHAT_COLUMN,
+          "group flex flex-row items-start gap-3 px-2 duration-300 animate-in fade-in slide-in-from-left-2 md:px-10",
+        )}
+      >
         <PersonaAvatar
           messageId={message.id}
           initials={personaInitials(message.persona_name ?? "?")}
@@ -237,7 +276,7 @@ const GroupMessage = memo(
             markdown
             className="text-foreground prose w-full min-w-0 rounded-lg bg-transparent p-0"
           >
-            {shown}
+            {message.message}
           </MessageContent>
           {message.evidence_tags && message.evidence_tags.length > 0 && (
             <div className="mt-0.5 flex flex-wrap gap-1.5">
@@ -254,38 +293,50 @@ const GroupMessage = memo(
               ))}
             </div>
           )}
-          {confidence.label && (
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[12px] uppercase tracking-wide font-semibold">Confidence Level:</span>
-              <span
-                className={cn(
-                  "inline-flex w-fit items-center rounded-full px-1.5 py-0.5 text-[10px] gap-2 font-semibold uppercase tracking-wide ring-1",
-                  confidenceBadgeClass(confidence.label),
-                )}
-              >
-                {confidence.label.split(" ")[0]}
-                {typeof message.confidence_score === "number"
-                  ? ` · ${message.confidence_score}%`
-                  : ""}
-                {confidence.detail && (
-                  <Tooltip>
-                    <TooltipTrigger className="flex justify-start">
-                      <Info className="h-3 w-3" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      {confidence.detail}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </span>
-            </div>
-          )}
-          <MessageActions className="-ml-2.5 flex opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 has-[[aria-pressed=true]]:opacity-100">
-            {copyAction}
-            {onSpeak && message.message.trim() && (
-              <SpeakAction message={message} onSpeak={onSpeak} />
+          {/* Footer: confidence on the left, actions on the right. Wraps onto
+              two lines when the column is too narrow for both. */}
+          <div className="mt-1.5 flex w-full flex-wrap items-center gap-x-3 gap-y-1">
+            {confidence.label && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground/80">
+                  Confidence level:
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1",
+                    confidenceBadgeClass(confidence.label),
+                  )}
+                >
+                  {confidence.label.split(" ")[0]}
+                  {typeof message.confidence_score === "number"
+                    ? ` · ${message.confidence_score}%`
+                    : ""}
+                  {confidence.detail && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        aria-label="Why this confidence level"
+                        className="flex rounded-full outline-none focus-visible:ring-2 focus-visible:ring-current"
+                      >
+                        <Info className="size-3" aria-hidden="true" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        {confidence.detail}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </span>
+              </div>
             )}
-          </MessageActions>
+            {/* Revealed on hover like a user turn's actions; also while one
+                has keyboard focus, or while the reply is being read aloud. */}
+            <MessageActions className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 has-[[aria-pressed=true]]:opacity-100">
+              {onReply && <ReplyAction message={message} onReply={onReply} />}
+              {copyAction}
+              {onSpeak && message.message.trim() && (
+                <SpeakAction message={message} onSpeak={onSpeak} />
+              )}
+            </MessageActions>
+          </div>
         </div>
       </Message>
     );

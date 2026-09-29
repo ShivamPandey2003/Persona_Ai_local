@@ -84,6 +84,50 @@ describe("PersonaPanel", () => {
     expect(screen.queryByText("Gamma")).not.toBeInTheDocument();
   });
 
+  it("sorts by coverage by default, and by name or build order on request", async () => {
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    seedPersonas(
+      [
+        makePersona({ coverage: 60 }),
+        makePersona({ persona_id: "pb", persona_name: "Beta", coverage: 90 }),
+        makePersona({ persona_id: "pc", persona_name: "Gamma", coverage: 50 }),
+        // A builder persona: no coverage of its own until the dashboard has one.
+        makePersona({ persona_id: "pd", persona_name: "Delta", coverage: 0, persona_index: 0 }),
+      ],
+      [
+        // The dashboard's evidence-backed figure wins over the list's.
+        {
+          persona_id: "pc",
+          persona_name: "Gamma",
+          insufficient_data: false,
+          final_coverage: 95,
+          study_summary: [],
+          evidence_by_category: [],
+          unique_studies: 1,
+          unique_respondents: 40,
+        },
+      ],
+    );
+    const order = () =>
+      screen
+        .getAllByRole("checkbox", { name: /^Select (?!all)/ })
+        .map((c) => c.getAttribute("aria-label")?.replace("Select ", ""));
+    const { user } = renderWithProviders(<PersonaPanel projectId="p1" />);
+    await screen.findByText("Alpha");
+
+    await waitFor(() => expect(order()).toEqual(["Gamma", "Beta", "Alpha", "Delta"]));
+
+    await user.click(screen.getByRole("button", { name: "Sort: Coverage" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /^Name/ }));
+    expect(order()).toEqual(["Alpha", "Beta", "Delta", "Gamma"]);
+    expect(screen.getByRole("button", { name: "Sort: Name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sort: Name" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /^Default/ }));
+    expect(order()).toEqual(["Delta", "Alpha", "Beta", "Gamma"]);
+  });
+
   it("shows an empty state when there are no personas", async () => {
     seedPersonas([]);
     renderWithProviders(<PersonaPanel projectId="p1" />);

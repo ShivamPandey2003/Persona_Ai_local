@@ -82,6 +82,7 @@ export const useGroupHistory = (groupId: string | undefined) => {
           id: `${groupId}-h-${index}-p${j}`,
           role: "persona",
           message: r.response,
+          persona_id: r.persona_id,
           persona_name: r.persona_name,
           evidence_tags: r.evidence_tags,
           confidence_level: r.confidence_level,

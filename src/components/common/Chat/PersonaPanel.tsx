@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  ArrowDownUp,
   BarChart3,
   CheckCircle2,
   ChevronDown,
@@ -34,6 +35,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import EmptyState from "@/components/common/EmptyState";
 import PersonaEvidence, { COVERAGE_HOVER_TEXT } from "./PersonaEvidence";
 import ProjectDataFilesList from "./ProjectDataFilesList";
@@ -105,6 +114,70 @@ function isBuilderPersona(p: PersonaListItem): boolean {
     ].some((a) => a != null && a.length > 0)
   );
 }
+
+/** How the persona list is ordered. */
+type PersonaSort = "coverage" | "name" | "default";
+
+const SORT_OPTIONS: { value: PersonaSort; label: string; hint: string }[] = [
+  { value: "coverage", label: "Coverage", hint: "Highest first" },
+  { value: "name", label: "Name", hint: "A to Z" },
+  { value: "default", label: "Default", hint: "As built" },
+];
+
+const DEFAULT_SORT: PersonaSort = "coverage";
+
+const nameCollator = new Intl.Collator(undefined, {
+  sensitivity: "base",
+  numeric: true,
+});
+
+/**
+ * The coverage figure a persona's card shows: the dashboard's evidence-backed
+ * number when it has one, else the list's own figure for a data-file persona.
+ * Builder personas have none until the dashboard supplies it.
+ */
+function coverageOf(
+  persona: PersonaListItem,
+  dash: DashboardPersona | undefined,
+): number | null {
+  if (typeof dash?.final_coverage === "number") return dash.final_coverage;
+  if (isBuilderPersona(persona)) return null;
+  return Number.isFinite(persona.coverage) ? persona.coverage : null;
+}
+
+/**
+ * Orders `list` in place. Personas with nothing to sort on (no coverage, no
+ * name) go last, and Array#sort is stable, so ties keep the default order.
+ */
+function sortPersonas(
+  list: PersonaListItem[],
+  sort: PersonaSort,
+  evidence: Map<string, DashboardPersona>,
+): PersonaListItem[] {
+  if (sort === "name") {
+    return list.sort((a, b) => {
+      const na = a.persona_name?.trim();
+      const nb = b.persona_name?.trim();
+      if (!na || !nb) return Number(!na) - Number(!nb);
+      return nameCollator.compare(na, nb);
+    });
+  }
+  if (sort === "coverage") {
+    const coverage = new Map(
+      list.map((p) => [p.persona_id, coverageOf(p, evidence.get(p.persona_id))]),
+    );
+    return list.sort((a, b) => {
+      const ca = coverage.get(a.persona_id) ?? null;
+      const cb = coverage.get(b.persona_id) ?? null;
+      if (ca === null || cb === null) return Number(ca === null) - Number(cb === null);
+      return cb - ca;
+    });
+  }
+  return list;
+}
+
+// Shared look of the toolbar controls above the persona list.
+const TOOLBAR_CONTROL = "h-8 rounded-lg bg-background px-2.5 text-xs font-medium";
 
 function SummaryCard({
   icon,
@@ -241,6 +314,9 @@ function PersonaPanel({
   const [columns, setColumns] = useState(3);
   // Dashboard layout: rich "grid" cards or a compact "list" for scanning many.
   const [view, setView] = useState<"grid" | "list">("list");
+  const [sort, setSort] = useState<PersonaSort>(DEFAULT_SORT);
+  const sortLabel =
+    SORT_OPTIONS.find((o) => o.value === sort)?.label ?? SORT_OPTIONS[0].label;
   // Which dataset's personas to show; "all" shows every persona.
   const [sourceFilter, setSourceFilter] = useState<"all" | DataSourceKey>(
     "all",
@@ -292,19 +368,25 @@ function PersonaPanel({
     return map;
   }, [dashboardQuery.data?.personas]);
 
-  // What the dashboard renders. Selection, select-all and group chat all work
-  // on this list, so a hidden persona is never silently part of a group chat.
-  // The "Insufficient Data" tile narrows it to the personas that fell short.
+  // What the dashboard renders, in the chosen order. Selection, select-all and
+  // group chat all work on this list, so a hidden persona is never silently
+  // part of a group chat. The "Insufficient Data" tile narrows it to the
+  // personas that fell short.
   const personas = useMemo(
     () =>
-      allPersonas.filter(
-        (p) =>
-          (sourceFilter === "all" ||
-            (p.data_source ?? "master") === sourceFilter) &&
-          (panelView !== "insufficient" ||
-            Boolean(evidenceByPersona.get(p.persona_id)?.insufficient_data)),
+      sortPersonas(
+        // filter() copies, so sorting in place never touches allPersonas.
+        allPersonas.filter(
+          (p) =>
+            (sourceFilter === "all" ||
+              (p.data_source ?? "master") === sourceFilter) &&
+            (panelView !== "insufficient" ||
+              Boolean(evidenceByPersona.get(p.persona_id)?.insufficient_data)),
+        ),
+        sort,
+        evidenceByPersona,
       ),
-    [allPersonas, sourceFilter, panelView, evidenceByPersona],
+    [allPersonas, sourceFilter, panelView, evidenceByPersona, sort],
   );
 
   // Track the grid's column count (1 below the md breakpoint, 3 at/above it) so
@@ -328,10 +410,10 @@ function PersonaPanel({
     setPanelView("personas");
   }, [projectId]);
 
-  // Rows are keyed by index, which shifts when the filter changes.
+  // Rows are keyed by index, which shifts when the filter or order changes.
   useEffect(() => {
     setExpandedRows({});
-  }, [sourceFilter, panelView]);
+  }, [sourceFilter, panelView, sort]);
 
   // A persona that matched too few respondents can't be chatted with — never
   // selectable, never part of "select all", never a valid chat target, even if
@@ -445,14 +527,48 @@ function PersonaPanel({
         </>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <p className="text-sm font-medium text-foreground">
               {panelView === "insufficient"
                 ? "Insufficient data personas"
                 : "Personas"}
               {personas.length > 0 ? ` · ${personas.length}` : ""}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={TOOLBAR_CONTROL}>
+                    <ArrowDownUp
+                      className="size-3.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    Sort: {sortLabel}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={sort}
+                    onValueChange={(v) => {
+                      const next = SORT_OPTIONS.find((o) => o.value === v);
+                      if (next) setSort(next.value);
+                    }}
+                  >
+                    {SORT_OPTIONS.map((o) => (
+                      <DropdownMenuRadioItem
+                        key={o.value}
+                        value={o.value}
+                        className="text-xs"
+                      >
+                        {o.label}
+                        <span className="ml-auto pl-3 text-muted-foreground">
+                          {o.hint}
+                        </span>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Select
                 value={sourceFilter}
                 onValueChange={(v) =>
@@ -460,8 +576,7 @@ function PersonaPanel({
                 }
               >
                 <SelectTrigger
-                  size="sm"
-                  className="text-xs"
+                  className={cn(TOOLBAR_CONTROL, "[&>svg]:size-3.5")}
                   aria-label="Filter personas by data source"
                 >
                   <SelectValue>
@@ -507,16 +622,20 @@ function PersonaPanel({
                   })}
                 </SelectContent>
               </Select>
-              <div className="inline-flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5">
+              <div
+                role="group"
+                aria-label="Persona layout"
+                className="inline-flex h-8 items-stretch gap-0.5 rounded-lg bg-muted p-0.5"
+              >
                 <button
                   type="button"
                   onClick={() => setView("list")}
                   aria-pressed={view === "list"}
                   aria-label="List view"
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
                     view === "list"
-                      ? "bg-background text-foreground shadow-sm"
+                      ? "bg-background font-semibold text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -529,9 +648,9 @@ function PersonaPanel({
                   aria-pressed={view === "grid"}
                   aria-label="Grid view"
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
                     view === "grid"
-                      ? "bg-background text-foreground shadow-sm"
+                      ? "bg-background font-semibold text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >

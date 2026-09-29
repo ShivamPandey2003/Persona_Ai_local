@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CircularLoader } from "@/components/ui/loader";
 import { ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CHAT_COLUMN } from "./chatLayout";
 
 type ChatComposerProps = {
   value: string;
@@ -25,6 +26,8 @@ type ChatComposerProps = {
   placeholder?: string;
   /** Optional control rendered on the left of the action row (e.g. a target selector). */
   leftSlot?: React.ReactNode;
+  /** Optional tools rendered just before the send button (e.g. attach, mic). */
+  rightSlot?: React.ReactNode;
   /** Optional content rendered above the textarea (e.g. an attachment preview strip). */
   attachmentBar?: React.ReactNode;
   /**
@@ -55,6 +58,7 @@ function ChatComposer({
   isSending = false,
   placeholder = "Ask anything",
   leftSlot,
+  rightSlot,
   attachmentBar,
   inputLocked = false,
   statusBar,
@@ -71,7 +75,7 @@ function ChatComposer({
   return (
     <div
       ref={rootRef}
-      className="inset-x-0 bottom-0 mx-auto w-full max-w-3xl shrink-0 px-3 pb-3 md:px-5"
+      className={cn(CHAT_COLUMN, "inset-x-0 bottom-0 shrink-0 px-3 pb-3 md:px-5")}
     >
       <PromptInput
         isLoading={isSending}
@@ -79,7 +83,7 @@ function ChatComposer({
         onValueChange={onChange}
         onSubmit={handleSubmit}
         disabled={disabled}
-        className="border-input bg-popover/85 backdrop-blur-xl relative z-10 w-full rounded-3xl border p-0 pt-1 shadow-[0_8px_30px_-10px_rgba(16,24,40,0.18)]"
+        className="border-input bg-popover/85 backdrop-blur-xl relative z-10 w-full rounded-2xl border p-0 pt-1 shadow-[0_8px_30px_-10px_rgba(16,24,40,0.18)]"
       >
         <div className="flex flex-col">
           {attachmentBar && (
@@ -106,29 +110,43 @@ function ChatComposer({
             )}
           </div>
 
-          <PromptInputActions className="mt-3 flex w-full items-center justify-between gap-2 p-2">
+          <PromptInputActions className="mt-2 flex w-full items-center justify-between gap-2 px-3 pb-3 pt-1">
             {/* Stop the click from reaching PromptInput's focus-the-textarea
                 handler, which would otherwise steal focus and close any control
                 (e.g. the recipient selector) rendered here. Pointer events are
                 left alone so Radix's own open-on-pointerdown still works. */}
             <div
-              className="flex items-center gap-2"
+              className="flex min-w-0 items-center gap-2"
               onClick={(e) => e.stopPropagation()}
             >
               {leftSlot}
             </div>
-            <Button
-              size="icon"
-              disabled={!canSend}
-              onClick={handleSubmit}
-              className="size-9 rounded-full"
-            >
-              {isSending ? (
-                <CircularLoader size="sm" className="border-white" />
-              ) : (
-                <ArrowUp size={18} />
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+              {rightSlot && (
+                <div
+                  className="flex items-center gap-0.5 sm:gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {rightSlot}
+                </div>
               )}
-            </Button>
+              <Button
+                size="icon"
+                disabled={!canSend}
+                onClick={handleSubmit}
+                aria-label="Send message"
+                className={cn(
+                  "ml-1 size-10 rounded-xl",
+                  canSend && "shadow-md shadow-primary/30",
+                )}
+              >
+                {isSending ? (
+                  <CircularLoader size="sm" className="border-white" />
+                ) : (
+                  <ArrowUp size={18} />
+                )}
+              </Button>
+            </div>
           </PromptInputActions>
         </div>
       </PromptInput>

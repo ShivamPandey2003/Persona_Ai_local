@@ -5,7 +5,7 @@ import { useSpeechStatus } from "@/hooks/useSpeechStatus";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/api/Voice/voice", () => ({
-  synthesizeSpeech: vi.fn(() => new Promise(() => {})),
+  streamSpeech: vi.fn(() => new Promise(() => {})),
 }));
 
 describe("useSpeechStatus", () => {

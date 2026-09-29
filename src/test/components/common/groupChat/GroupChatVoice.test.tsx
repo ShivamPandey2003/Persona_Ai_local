@@ -3,7 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { renderWithProviders } from "@/test/test-utils";
 import { server } from "@/test/msw/server";
-import { API_URL, ok } from "@/test/msw/handlers";
+import { API_URL, ok, ndjsonBody, ndjsonStream } from "@/test/msw/handlers";
 import { VOICE_ENDPOINTS } from "@/api/Voice/endpoints";
 import { authenticate } from "@/test/factories";
 import { speechPlayer } from "@/lib/voice/speechPlayer";
@@ -43,19 +43,48 @@ function voiceConfig(stt: boolean, tts: boolean) {
 }
 
 let enqueue: MockInstance<typeof speechPlayer.enqueue>;
-let prefetch: MockInstance<typeof speechPlayer.prefetch>;
 let stop: MockInstance<typeof speechPlayer.stop>;
 let prime: MockInstance<typeof speechPlayer.prime>;
+
+/** What the view fed the player as live utterances, in the order opened. */
+type Voiced = {
+  id: string;
+  speakerKey?: string;
+  groupId?: string;
+  text: string;
+  ended: boolean;
+  discarded: boolean;
+};
+let voiced: Voiced[] = [];
+const liveVoice = (id: string) => voiced.find((v) => v.id === id && !v.discarded);
+/** [speaker, what was said, finished?] for every utterance not discarded. */
+const spoken = () =>
+  voiced.filter((v) => !v.discarded).map((v) => [v.speakerKey, v.text.trim(), v.ended]);
 
 beforeEach(() => {
   routeGroupId = "g1";
   authenticate();
+  voiced = [];
   // Real audio can't play in jsdom; assert on what the view asks the player to do.
   enqueue = vi.spyOn(speechPlayer, "enqueue").mockImplementation(() => {});
-  prefetch = vi.spyOn(speechPlayer, "prefetch").mockImplementation(() => {});
   stop = vi.spyOn(speechPlayer, "stop").mockImplementation(() => {});
   vi.spyOn(speechPlayer, "toggle").mockImplementation(() => {});
   prime = vi.spyOn(speechPlayer, "prime").mockImplementation(() => {});
+  vi.spyOn(speechPlayer, "open").mockImplementation((info) => {
+    voiced.push({ ...info, text: "", ended: false, discarded: false });
+  });
+  vi.spyOn(speechPlayer, "append").mockImplementation((id, text) => {
+    const v = liveVoice(id);
+    if (v && !v.ended) v.text += text;
+  });
+  vi.spyOn(speechPlayer, "end").mockImplementation((id) => {
+    const v = liveVoice(id);
+    if (v) v.ended = true;
+  });
+  vi.spyOn(speechPlayer, "discard").mockImplementation((id) => {
+    const v = liveVoice(id);
+    if (v) v.discarded = true;
+  });
 });
 
 describe("GroupChatView voice", () => {
@@ -110,20 +139,18 @@ describe("GroupChatView voice", () => {
     expect(await screen.findByText("Affordability")).toBeInTheDocument();
     await screen.findByRole("button", { name: /stop reading replies aloud/i });
     expect(enqueue).not.toHaveBeenCalled();
-    expect(prefetch).not.toHaveBeenCalled();
+    expect(voiced).toEqual([]);
   });
 
-  it("reads broadcast replies aloud in order as they appear", async () => {
+  it("reads broadcast replies aloud in order, as they stream", async () => {
     localStorage.setItem(SPEAKER_PREFERENCE_KEY, "on");
     seedChat();
     server.use(
-      http.post(`${API_URL}persona/group-chat/message`, () =>
-        ok({
-          responses: [
-            { persona_id: "a", persona_name: "Ann", response: "Yes", evidence_tags: [] },
-            { persona_id: "b", persona_name: "Bob", response: "No", evidence_tags: [] },
-          ],
-        }),
+      http.post(`${API_URL}persona/group-chat/message/stream`, () =>
+        ndjsonStream([
+          { persona_id: "a", persona_name: "Ann", response: "Yes, I would." },
+          { persona_id: "b", persona_name: "Bob", response: "No thanks." },
+        ]),
       ),
     );
     const { user } = renderWithProviders(<GroupChatView />);
@@ -131,31 +158,169 @@ describe("GroupChatView voice", () => {
     await user.type(await screen.findByPlaceholderText(/message everyone/i), "Launch?{Enter}");
 
     expect(stop).toHaveBeenCalled(); // a new question interrupts reading
-    await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(2), { timeout: 3000 });
-    expect(prefetch.mock.calls.map(([item]) => item)).toEqual([
-      { text: "Yes", speakerKey: "Ann", groupId: "g1" },
-      { text: "No", speakerKey: "Bob", groupId: "g1" },
-    ]);
+    expect(prime).toHaveBeenCalled(); // sending unlocks audio for the replies
+    await waitFor(() =>
+      expect(spoken()).toEqual([
+        ["Ann", "Yes, I would.", true],
+        ["Bob", "No thanks.", true],
+      ]),
+    );
     // The group lets the backend use each persona's stored voice.
-    expect(
-      enqueue.mock.calls.map(([item]) => [item.text, item.speakerKey, item.groupId]),
-    ).toEqual([
-      ["Yes", "Ann", "g1"],
-      ["No", "Bob", "g1"],
-    ]);
+    expect(voiced.map((v) => v.groupId)).toEqual(["g1", "g1"]);
+    // Streamed replies go through the live API, never as whole messages.
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("starts speaking a reply before it has finished streaming", async () => {
+    localStorage.setItem(SPEAKER_PREFERENCE_KEY, "on");
+    seedChat();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const line = (event: unknown) => new TextEncoder().encode(JSON.stringify(event) + "\n");
+    server.use(
+      http.post(`${API_URL}persona/group-chat/message/stream`, () => {
+        const body = new ReadableStream({
+          async start(c) {
+            c.enqueue(line({ type: "start", personas: [{ persona_id: "a", persona_name: "Ann" }] }));
+            c.enqueue(line({ type: "persona_delta", persona_id: "a", delta: "First thought. " }));
+            await gate;
+            c.enqueue(line({ type: "persona_delta", persona_id: "a", delta: "Second thought." }));
+            c.enqueue(line({ type: "persona_done", persona_id: "a" }));
+            c.enqueue(
+              line({
+                type: "done",
+                responses: [
+                  {
+                    persona_id: "a",
+                    persona_name: "Ann",
+                    response: "First thought. Second thought.",
+                    evidence_tags: [],
+                  },
+                ],
+              }),
+            );
+            c.close();
+          },
+        });
+        return new HttpResponse(body, { headers: { "Content-Type": "application/x-ndjson" } });
+      }),
+    );
+    const { user } = renderWithProviders(<GroupChatView />);
+    await screen.findByRole("button", { name: /stop reading replies aloud/i });
+    await user.type(await screen.findByPlaceholderText(/message everyone/i), "Thoughts?{Enter}");
+
+    // Mid-reply: the first sentence is already with the player.
+    await waitFor(() => expect(spoken()).toEqual([["Ann", "First thought.", false]]));
+
+    release();
+    await waitFor(() =>
+      expect(spoken()).toEqual([["Ann", "First thought. Second thought.", true]]),
+    );
+  });
+
+  it("ends a reply once even when persona_done repeats", async () => {
+    localStorage.setItem(SPEAKER_PREFERENCE_KEY, "on");
+    seedChat();
+    server.use(
+      http.post(`${API_URL}persona/group-chat/message/stream`, () =>
+        ndjsonBody([
+          { type: "start", personas: [{ persona_id: "a", persona_name: "Ann" }] },
+          { type: "persona_delta", persona_id: "a", delta: "Yes please" },
+          // The backend sends done when the text ends, then again with confidence.
+          { type: "persona_done", persona_id: "a" },
+          { type: "persona_done", persona_id: "a", confidence_level: "High Confidence" },
+          {
+            type: "done",
+            responses: [
+              { persona_id: "a", persona_name: "Ann", response: "Yes please", evidence_tags: [] },
+            ],
+          },
+        ]),
+      ),
+    );
+    const { user } = renderWithProviders(<GroupChatView />);
+    await screen.findByRole("button", { name: /stop reading replies aloud/i });
+    await user.type(await screen.findByPlaceholderText(/message everyone/i), "Launch?{Enter}");
+
+    expect(await screen.findByText("Yes please")).toBeInTheDocument();
+    await waitFor(() => expect(spoken()).toEqual([["Ann", "Yes please", true]]));
+    expect(voiced).toHaveLength(1);
+  });
+
+  it("reads an off-topic fallback reply once per persona", async () => {
+    localStorage.setItem(SPEAKER_PREFERENCE_KEY, "on");
+    seedChat();
+    const fallback = "Let's keep to the product.";
+    server.use(
+      http.post(`${API_URL}persona/group-chat/message/stream`, () =>
+        ndjsonBody([
+          {
+            type: "start",
+            personas: [
+              { persona_id: "a", persona_name: "Ann" },
+              { persona_id: "b", persona_name: "Bob" },
+            ],
+          },
+          { type: "fallback_delta", delta: fallback },
+          {
+            type: "done",
+            responses: ["a", "b"].map((id, i) => ({
+              persona_id: id,
+              persona_name: i === 0 ? "Ann" : "Bob",
+              response: fallback,
+              evidence_tags: [],
+            })),
+          },
+        ]),
+      ),
+    );
+    const { user } = renderWithProviders(<GroupChatView />);
+    await screen.findByRole("button", { name: /stop reading replies aloud/i });
+    await user.type(await screen.findByPlaceholderText(/message everyone/i), "Weather?{Enter}");
+
+    await waitFor(() => expect(screen.getAllByText(fallback)).toHaveLength(2));
+    await waitFor(() =>
+      expect(spoken()).toEqual([
+        ["Ann", fallback, true],
+        ["Bob", fallback, true],
+      ]),
+    );
+  });
+
+  it("stops reading a reply that the server failed", async () => {
+    localStorage.setItem(SPEAKER_PREFERENCE_KEY, "on");
+    seedChat();
+    server.use(
+      http.post(`${API_URL}persona/group-chat/message/stream`, () =>
+        ndjsonBody([
+          { type: "start", personas: [{ persona_id: "a", persona_name: "Ann" }] },
+          { type: "persona_delta", persona_id: "a", delta: "Half a thought. And" },
+          { type: "error", message: "Failed to generate persona responses" },
+        ]),
+      ),
+    );
+    const { user } = renderWithProviders(<GroupChatView />);
+    await screen.findByRole("button", { name: /stop reading replies aloud/i });
+    await user.type(await screen.findByPlaceholderText(/message everyone/i), "Hm?{Enter}");
+
+    await waitFor(() => expect(voiced).toHaveLength(1));
+    await waitFor(() => expect(voiced[0].discarded).toBe(true));
+    expect(spoken()).toEqual([]);
   });
 
   it("doesn't read replies when read-aloud is off", async () => {
     seedChat();
     server.use(
-      http.post(`${API_URL}persona/group-chat/message`, () =>
-        ok({ responses: [{ persona_id: "a", persona_name: "Ann", response: "Sure", evidence_tags: [] }] }),
+      http.post(`${API_URL}persona/group-chat/message/stream`, () =>
+        ndjsonStream([{ persona_id: "a", persona_name: "Ann", response: "Sure" }]),
       ),
     );
     const { user } = renderWithProviders(<GroupChatView />);
     await user.type(await screen.findByPlaceholderText(/message everyone/i), "Hi{Enter}");
     expect(await screen.findByText("Sure")).toBeInTheDocument();
+    expect(voiced).toEqual([]);
     expect(enqueue).not.toHaveBeenCalled();
+    expect(prime).not.toHaveBeenCalled();
   });
 
   // Per-message read-aloud button is hidden behind
@@ -197,11 +362,9 @@ describe("GroupChatView voice", () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
     server.use(
-      http.post(`${API_URL}persona/group-chat/message`, async () => {
+      http.post(`${API_URL}persona/group-chat/message/stream`, async () => {
         await gate;
-        return ok({
-          responses: [{ persona_id: "a", persona_name: "Ann", response: "Stale", evidence_tags: [] }],
-        });
+        return ndjsonStream([{ persona_id: "a", persona_name: "Ann", response: "Stale" }]);
       }),
     );
     const { user, rerender } = renderWithProviders(<GroupChatView />);
@@ -214,6 +377,7 @@ describe("GroupChatView voice", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(screen.queryByText("Stale")).not.toBeInTheDocument();
+    expect(voiced).toEqual([]);
     expect(enqueue).not.toHaveBeenCalled();
   });
 
@@ -252,7 +416,7 @@ describe("GroupChatView voice", () => {
       seedChat();
       let sent = false;
       server.use(
-        http.post(`${API_URL}persona/group-chat/message`, () => {
+        http.post(`${API_URL}persona/group-chat/message/stream`, () => {
           sent = true;
           return HttpResponse.json({});
         }),

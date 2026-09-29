@@ -7,7 +7,8 @@ import { API_URL, envelopeError, ok } from "@/test/msw/handlers";
 import { VOICE_ENDPOINTS } from "@/api/Voice/endpoints";
 import { authenticate } from "@/test/factories";
 import { createHookWrapper } from "@/test/test-utils";
-import { synthesizeSpeech, transcribeAudio, useVoiceConfig } from "@/api/Voice/voice";
+import { streamSpeech, transcribeAudio, useVoiceConfig } from "@/api/Voice/voice";
+import type { AudioChunk } from "@/lib/voice/pcm";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -82,59 +83,120 @@ describe("transcribeAudio", () => {
   });
 });
 
-describe("synthesizeSpeech", () => {
-  it("returns the WAV clip and sends the speaker", async () => {
+describe("streamSpeech", () => {
+  const TTS = `${API_URL}${VOICE_ENDPOINTS.tts}`;
+  const pcmBody = (samples: number[], chunkBytes = 3) => {
+    const bytes = new Uint8Array(samples.length * 2);
+    const view = new DataView(bytes.buffer);
+    samples.forEach((s, i) => view.setInt16(i * 2, s, true));
+    return new ReadableStream({
+      start(c) {
+        for (let i = 0; i < bytes.length; i += chunkBytes) c.enqueue(bytes.slice(i, i + chunkBytes));
+        c.close();
+      },
+    });
+  };
+  const pcmResponse = (samples: number[], chunkBytes?: number) =>
+    new HttpResponse(pcmBody(samples, chunkBytes), {
+      headers: { "content-type": "application/octet-stream", "X-Sr": "24000", "X-Sf": "s16le", "X-Ch": "1" },
+    });
+
+  const collect = async (args: Partial<Parameters<typeof streamSpeech>[0]> = {}) => {
+    const chunks: AudioChunk[] = [];
+    await streamSpeech({ text: "Hello.", onChunk: (c) => chunks.push(c), ...args });
+    return chunks;
+  };
+
+  it("asks for a stream and decodes PCM as it arrives", async () => {
     let body: Record<string, unknown> = {};
     server.use(
-      http.post(`${API_URL}${VOICE_ENDPOINTS.tts}`, async ({ request }) => {
+      http.post(TTS, async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return new HttpResponse(new Uint8Array([1, 2, 3, 4]), {
-          headers: { "content-type": "audio/wav" },
-        });
+        return pcmResponse([0, 16384, -32768, 8192], 3);
       }),
     );
+    const chunks = await collect({ speakerKey: "Ann", groupId: "g1", announce: false });
 
-    const audio = await synthesizeSpeech({ text: "Hello.", speakerKey: "Ann" });
-    expect(audio.size).toBe(4);
-    expect(body).toEqual({ token: "voice-token", text: "Hello.", speaker_key: "Ann" });
+    expect(body).toEqual({
+      token: "voice-token",
+      text: "Hello.",
+      speaker_key: "Ann",
+      group_id: "g1",
+      announce: false,
+      stream: true,
+    });
+    // Several chunks, split mid-sample on the wire, still add up exactly.
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((c) => c.sampleRate === 24_000)).toBe(true);
+    expect(chunks.flatMap((c) => Array.from(c.channels[0]))).toEqual([0, 0.5, -1, 0.25]);
   });
 
-  it("sends the group chat when given", async () => {
+  it("announces by default and omits a blank speaker", async () => {
     let body: Record<string, unknown> = {};
     server.use(
-      http.post(`${API_URL}${VOICE_ENDPOINTS.tts}`, async ({ request }) => {
+      http.post(TTS, async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return new HttpResponse(new Uint8Array([1]), { headers: { "content-type": "audio/wav" } });
+        return pcmResponse([1]);
       }),
     );
-    await synthesizeSpeech({ text: "Hello.", speakerKey: "Ann", groupId: "g1" });
-    expect(body).toMatchObject({ speaker_key: "Ann", group_id: "g1" });
-  });
-
-  it("omits a blank speaker", async () => {
-    let body: Record<string, unknown> = {};
-    server.use(
-      http.post(`${API_URL}${VOICE_ENDPOINTS.tts}`, async ({ request }) => {
-        body = (await request.json()) as Record<string, unknown>;
-        return new HttpResponse(new Uint8Array([1]), { headers: { "content-type": "audio/wav" } });
-      }),
-    );
-    await synthesizeSpeech({ text: "Hello.", speakerKey: "" });
+    await collect({ speakerKey: "" });
+    expect(body).toMatchObject({ announce: true, stream: true });
     expect(body).not.toHaveProperty("speaker_key");
   });
 
+  it("falls back to a complete WAV when the server can't stream", async () => {
+    const wav = new Uint8Array(46);
+    const view = new DataView(wav.buffer);
+    [..."RIFF"].forEach((c, i) => view.setUint8(i, c.charCodeAt(0)));
+    view.setUint32(4, 38, true);
+    [..."WAVEfmt "].forEach((c, i) => view.setUint8(8 + i, c.charCodeAt(0)));
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, 16_000, true);
+    view.setUint16(34, 16, true);
+    [..."data"].forEach((c, i) => view.setUint8(36 + i, c.charCodeAt(0)));
+    view.setUint32(40, 2, true);
+    view.setInt16(44, 16384, true);
+    server.use(
+      http.post(TTS, () => new HttpResponse(wav, { headers: { "content-type": "audio/wav" } })),
+    );
+    const chunks = await collect();
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].sampleRate).toBe(16_000);
+    expect(chunks[0].channels[0][0]).toBe(0.5);
+  });
+
   it("throws the backend message without toasting", async () => {
-    server.use(http.post(`${API_URL}${VOICE_ENDPOINTS.tts}`, () => envelopeError(502, "Text to speech failed")));
-    await expect(synthesizeSpeech({ text: "Hello." })).rejects.toThrow("Text to speech failed");
+    server.use(http.post(TTS, () => envelopeError(502, "Text to speech failed")));
+    await expect(collect()).rejects.toThrow("Text to speech failed");
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("rejects an empty clip", async () => {
+  it("rejects a stream with no audio in it", async () => {
+    server.use(http.post(TTS, () => pcmResponse([])));
+    await expect(collect()).rejects.toThrow(/couldn't play/i);
+  });
+
+  it("rejects an unknown sample format", async () => {
     server.use(
-      http.post(`${API_URL}${VOICE_ENDPOINTS.tts}`, () =>
-        new HttpResponse(new Uint8Array([]), { headers: { "content-type": "audio/wav" } }),
+      http.post(TTS, () =>
+        new HttpResponse(pcmBody([1]), {
+          headers: { "content-type": "application/octet-stream", "X-Sf": "f32le" },
+        }),
       ),
     );
-    await expect(synthesizeSpeech({ text: "Hello." })).rejects.toThrow(/couldn't play/i);
+    await expect(collect()).rejects.toThrow(/unsupported audio format/i);
+  });
+
+  it("rejects with an AbortError when cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(collect({ signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("reports a network failure", async () => {
+    server.use(http.post(TTS, () => HttpResponse.error()));
+    await expect(collect()).rejects.toThrow(/network/i);
   });
 });
