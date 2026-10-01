@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { Check, Copy, Info, Loader2, Pencil, Reply, Square, Volume2 } from "lucide-react";
+import { Bot, Check, Copy, Info, Loader2, Pencil, Reply, Square, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,8 @@ type GroupMessageProps = {
    * the reply aloud. Keep it referentially stable so memoization holds.
    */
   onSpeak?: (message: GroupMessageT) => void;
+  /** Delay before this message's entrance, to stagger a batch (e.g. history). */
+  enterDelayMs?: number;
 };
 
 /**
@@ -171,12 +173,19 @@ function ReplyAction({
   );
 }
 
-/** Renders one group-chat turn: a right-aligned user bubble or a labelled persona reply. */
+/**
+ * Renders one group-chat turn: a right-aligned user bubble, a labelled persona
+ * reply, or a single fallback reply for the whole group.
+ */
 const GroupMessage = memo(
-  ({ message, color, onEdit, onReply, onSpeak }: GroupMessageProps) => {
+  ({ message, color, onEdit, onReply, onSpeak, enterDelayMs = 0 }: GroupMessageProps) => {
     const isUser = message.role === "user";
     const [copied, setCopied] = useState(false);
     const confidence = parseConfidence(message.confidence_level ?? "");
+    const enterStyle =
+      enterDelayMs > 0
+        ? { animationDelay: `${enterDelayMs}ms`, animationFillMode: "backwards" as const }
+        : undefined;
 
     const handleCopy = async () => {
       try {
@@ -205,6 +214,7 @@ const GroupMessage = memo(
     if (isUser) {
       return (
         <Message
+          style={enterStyle}
           className={cn(
             CHAT_COLUMN,
             "group flex flex-col items-end gap-1 px-2 duration-300 animate-in fade-in slide-in-from-right-2 md:px-10",
@@ -252,10 +262,40 @@ const GroupMessage = memo(
       );
     }
 
+    // One reply for the whole group (the fallback when personas can't answer).
+    if (message.role === "system") {
+      return (
+        <Message
+          style={enterStyle}
+          className={cn(
+            CHAT_COLUMN,
+            "group flex flex-row items-start gap-3 px-2 duration-300 animate-in fade-in slide-in-from-left-2 md:px-10",
+          )}
+        >
+          {/* Grey robot, not a coloured persona avatar: the app is speaking. */}
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
+            <Bot className="size-4" aria-hidden="true" />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-1 items-start pt-1">
+            <MessageContent
+              markdown
+              className="text-muted-foreground prose w-full min-w-0 rounded-lg bg-transparent p-0"
+            >
+              {message.message}
+            </MessageContent>
+            <MessageActions className="flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+              {copyAction}
+            </MessageActions>
+          </div>
+        </Message>
+      );
+    }
+
     const style = personaColorStyle(color);
 
     return (
       <Message
+        style={enterStyle}
         className={cn(
           CHAT_COLUMN,
           "group flex flex-row items-start gap-3 px-2 duration-300 animate-in fade-in slide-in-from-left-2 md:px-10",

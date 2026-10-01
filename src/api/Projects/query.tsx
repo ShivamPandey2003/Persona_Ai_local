@@ -24,6 +24,9 @@ type GetProjectListRes = {
 /** Default page size for the projects listing (matches the backend default). */
 export const PROJECTS_PAGE_SIZE = 10;
 
+/** Page sizes the projects listing offers. */
+export const PROJECTS_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+
 /**
  * POST /v1/projects/list — paginated, server-side searched project listing.
  *

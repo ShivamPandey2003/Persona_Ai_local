@@ -11,6 +11,7 @@ import { useTypewriter } from "@/hooks/useTypewriter";
 import { Check, Copy, Pencil } from "lucide-react";
 import { memo, useState } from "react";
 import { toast } from "sonner";
+import BuilderAvatar from "./BuilderAvatar";
 
 type MessageComponentProps = {
   message: MessageT;
@@ -22,13 +23,18 @@ type MessageComponentProps = {
   onEdit?: (text: string) => void;
   /** Typewriter-reveal this message (a freshly received assistant reply). */
   animate?: boolean;
+  /** Delay before this message's entrance, to stagger a batch (e.g. history). */
+  enterDelayMs?: number;
 };
 
 export const MessageComponent = memo(
-  ({ message, isLastMessage, onEdit, animate }: MessageComponentProps) => {
+  ({ message, isLastMessage, onEdit, animate, enterDelayMs = 0 }: MessageComponentProps) => {
     const [copied, setCopied] = useState(false);
     const isAssistant = message.userType === "Assistant";
     const shown = useTypewriter(message.message, Boolean(animate) && isAssistant);
+    // The typewriter reveals from the first non-space character on.
+    const writing =
+      Boolean(animate) && isAssistant && shown.length < message.message.trimStart().length;
 
     const handleCopy = async () => {
       try {
@@ -42,40 +48,48 @@ export const MessageComponent = memo(
 
     return (
       <Message
+        style={
+          enterDelayMs > 0
+            ? { animationDelay: `${enterDelayMs}ms`, animationFillMode: "backwards" }
+            : undefined
+        }
         className={cn(
           CHAT_COLUMN,
           "flex flex-col gap-2 px-2 md:px-10",
-          "duration-300 animate-in fade-in",
+          "duration-300 animate-in fade-in motion-reduce:animate-none",
           isAssistant
             ? "items-start slide-in-from-left-2"
             : "items-end slide-in-from-right-2",
         )}
       >
         {isAssistant ? (
-          <div className="group flex w-full flex-col gap-0">
-            <MessageContent
-              className="text-foreground prose w-full min-w-0 flex-1 rounded-lg bg-transparent p-0"
-              markdown
-            >
-              {shown}
-            </MessageContent>
-            <MessageActions
-              className={cn(
-                "-ml-2.5 flex",
-                isLastMessage && "opacity-100",
-              )}
-            >
-              <MessageAction tooltip={copied ? "Copied" : "Copy"} delayDuration={100}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
-                  onClick={handleCopy}
-                >
-                  {copied ? <Check className="text-emerald-600" /> : <Copy />}
-                </Button>
-              </MessageAction>
-            </MessageActions>
+          <div className="group flex w-full items-start gap-3">
+            <BuilderAvatar active={writing} />
+            <div className="flex min-w-0 flex-1 flex-col gap-0">
+              <MessageContent
+                className="text-foreground prose w-full min-w-0 flex-1 rounded-lg bg-transparent p-0"
+                markdown
+              >
+                {shown}
+              </MessageContent>
+              <MessageActions
+                className={cn(
+                  "-ml-2.5 flex",
+                  isLastMessage && "opacity-100",
+                )}
+              >
+                <MessageAction tooltip={copied ? "Copied" : "Copy"} delayDuration={100}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full"
+                    onClick={handleCopy}
+                  >
+                    {copied ? <Check className="text-emerald-600" /> : <Copy />}
+                  </Button>
+                </MessageAction>
+              </MessageActions>
+            </div>
           </div>
         ) : (
           <div className="group flex w-full flex-col items-end gap-1">

@@ -16,6 +16,8 @@ type RawPersonaReply = {
   evidence_tags?: string[];
   confidence_level?: string | null;
   confidence_score?: number | null;
+  /** 1 when the personas didn't answer and this is the shared fallback text. */
+  is_fallback?: number | boolean;
 };
 
 type RawGroupTurn = {
@@ -77,7 +79,18 @@ export const useGroupHistory = (groupId: string | undefined) => {
           })),
         });
       }
-      (data.responses ?? []).forEach((r, j) => {
+      const replies = data.responses ?? [];
+      // A turn the personas didn't answer saves the same fallback once per
+      // persona; it is shown once, as a reply to the whole group.
+      if (replies.length > 0 && replies.every((r) => r.is_fallback)) {
+        out.push({
+          id: `${groupId}-h-${index}-f`,
+          role: "system",
+          message: replies[0].response,
+        });
+        continue;
+      }
+      replies.forEach((r, j) => {
         out.push({
           id: `${groupId}-h-${index}-p${j}`,
           role: "persona",

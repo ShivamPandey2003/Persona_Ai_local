@@ -31,19 +31,18 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import EmptyState from "@/components/common/EmptyState";
+import Collapse from "@/components/common/Collapse";
 import PersonaEvidence, { COVERAGE_HOVER_TEXT } from "./PersonaEvidence";
 import ProjectDataFilesList from "./ProjectDataFilesList";
 import DataSourceBadge, {
@@ -59,12 +58,30 @@ import {
 import { usePersonaUpdate } from "@/api/Persona/mutation";
 import { useStartGroupChat } from "@/api/GroupChat/mutation";
 import type { DataSourceKey } from "@/api/Chat/query";
-import { useCountUp } from "@/hooks/useCountUp";
 import { personaInitials } from "@/lib/personaColors";
+import { PICK_ITEM, PICK_MENU } from "@/lib/menuStyles";
+import { groupChatTitle } from "@/lib/chatTitles";
 import { cn } from "@/lib/utils";
 
 const INSUFFICIENT_DATA_TOOLTIP =
   "This persona doesn't have sufficient respondent data.";
+
+/**
+ * Marks a persona built by the builder chat the user is in: a thin purple tab
+ * on its row/card's left edge (the row must be `relative`), named for
+ * assistive tech.
+ */
+function FromThisChatEdge() {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-primary/70"
+      />
+      <span className="sr-only">Built in this chat</span>
+    </>
+  );
+}
 
 /** Shown in place of the status so a non-selectable persona says why at a glance. */
 function InsufficientDataBadge() {
@@ -86,12 +103,6 @@ function coverageColor(value: number): string {
   if (value >= 80) return "bg-emerald-500";
   if (value >= 70) return "bg-sky-500";
   return "bg-amber-500";
-}
-
-function groupTitle(names: string[]): string {
-  if (names.length === 1) return names[0];
-  const head = names.slice(0, 3).join(", ");
-  return names.length > 3 ? `${head} +${names.length - 3}` : head;
 }
 
 /**
@@ -116,12 +127,24 @@ function isBuilderPersona(p: PersonaListItem): boolean {
 }
 
 /** How the persona list is ordered. */
-type PersonaSort = "coverage" | "name" | "default";
+type PersonaSort =
+  | "coverage"
+  | "coverage-asc"
+  | "respondents"
+  | "studies"
+  | "name"
+  | "name-desc"
+  | "default";
 
-const SORT_OPTIONS: { value: PersonaSort; label: string; hint: string }[] = [
-  { value: "coverage", label: "Coverage", hint: "Highest first" },
-  { value: "name", label: "Name", hint: "A to Z" },
-  { value: "default", label: "Default", hint: "As built" },
+/** `label` is the menu row; `short` follows "Sort:" on the button. */
+const SORT_OPTIONS: { value: PersonaSort; label: string; short: string }[] = [
+  { value: "coverage", label: "Coverage: highest first", short: "Coverage" },
+  { value: "coverage-asc", label: "Coverage: lowest first", short: "Lowest coverage" },
+  { value: "respondents", label: "Most respondents", short: "Respondents" },
+  { value: "studies", label: "Most studies", short: "Studies" },
+  { value: "name", label: "Name: A to Z", short: "Name A–Z" },
+  { value: "name-desc", label: "Name: Z to A", short: "Name Z–A" },
+  { value: "default", label: "Default order", short: "Default" },
 ];
 
 const DEFAULT_SORT: PersonaSort = "coverage";
@@ -147,34 +170,47 @@ function coverageOf(
 
 /**
  * Orders `list` in place. Personas with nothing to sort on (no coverage, no
- * name) go last, and Array#sort is stable, so ties keep the default order.
+ * respondent data, no name) go last whichever the direction, and Array#sort
+ * is stable, so ties keep the default order.
  */
 function sortPersonas(
   list: PersonaListItem[],
   sort: PersonaSort,
   evidence: Map<string, DashboardPersona>,
 ): PersonaListItem[] {
-  if (sort === "name") {
+  if (sort === "default") return list;
+
+  if (sort === "name" || sort === "name-desc") {
+    const dir = sort === "name" ? 1 : -1;
     return list.sort((a, b) => {
       const na = a.persona_name?.trim();
       const nb = b.persona_name?.trim();
       if (!na || !nb) return Number(!na) - Number(!nb);
-      return nameCollator.compare(na, nb);
+      return dir * nameCollator.compare(na, nb);
     });
   }
-  if (sort === "coverage") {
-    const coverage = new Map(
-      list.map((p) => [p.persona_id, coverageOf(p, evidence.get(p.persona_id))]),
-    );
-    return list.sort((a, b) => {
-      const ca = coverage.get(a.persona_id) ?? null;
-      const cb = coverage.get(b.persona_id) ?? null;
-      if (ca === null || cb === null) return Number(ca === null) - Number(cb === null);
-      return cb - ca;
-    });
-  }
-  return list;
+
+  const valueOf = (p: PersonaListItem): number | null => {
+    const dash = evidence.get(p.persona_id);
+    if (sort === "respondents") return dash ? dash.unique_respondents : null;
+    if (sort === "studies") return dash ? dash.unique_studies : null;
+    return coverageOf(p, dash);
+  };
+  // Highest first, except "lowest coverage".
+  const dir = sort === "coverage-asc" ? 1 : -1;
+  const values = new Map(list.map((p) => [p.persona_id, valueOf(p)]));
+  return list.sort((a, b) => {
+    const va = values.get(a.persona_id) ?? null;
+    const vb = values.get(b.persona_id) ?? null;
+    if (va === null || vb === null) return Number(va === null) - Number(vb === null);
+    return dir * (va - vb);
+  });
 }
+
+// Radix wraps an option's text in an inline span; making it flex lets the
+// persona count sit at the right edge.
+const COUNTED_ITEM =
+  "[&>span:last-child]:flex [&>span:last-child]:flex-1 [&>span:last-child]:items-center";
 
 // Shared look of the toolbar controls above the persona list.
 const TOOLBAR_CONTROL = "h-8 rounded-lg bg-background px-2.5 text-xs font-medium";
@@ -186,6 +222,7 @@ function SummaryCard({
   iconBg,
   active,
   onClick,
+  loading = false,
 }: {
   icon: React.ReactNode;
   value: number;
@@ -194,13 +231,15 @@ function SummaryCard({
   /** This tile's view is the one shown below. */
   active: boolean;
   onClick: () => void;
+  /** Its number hasn't arrived yet: a placeholder rather than a false 0. */
+  loading?: boolean;
 }) {
-  const display = useCountUp(value);
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      aria-busy={loading || undefined}
       className="h-fit rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Card
@@ -219,10 +258,16 @@ function SummaryCard({
             {icon}
           </div>
           <div>
-            {/* Number ticks up to its value (count-up animation). */}
-            <p className="text-2xl font-semibold tabular-nums text-foreground">
-              {display}
-            </p>
+            {loading ? (
+              <Skeleton
+                data-testid="summary-value-skeleton"
+                className="mb-1 h-7 w-10 rounded-md"
+              />
+            ) : (
+              <p className="text-2xl font-semibold tabular-nums text-foreground">
+                {value}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">{label}</p>
           </div>
         </CardContent>
@@ -289,6 +334,16 @@ type PersonaPanelProps = {
   onStarted?: () => void;
   /** Height of the scrollable persona grid. */
   scrollHeight?: string;
+  /**
+   * Open on this persona: its evidence starts expanded and its row lightly
+   * highlighted (used when a builder chat's build results link here).
+   */
+  focusPersonaId?: string | null;
+  /**
+   * Personas built by the builder chat the user is in. They get a thin purple
+   * tab on their left edge so they stand out among the project's others.
+   */
+  chatPersonaIds?: ReadonlySet<string>;
 };
 
 /**
@@ -303,6 +358,8 @@ function PersonaPanel({
   projectId,
   onStarted,
   scrollHeight = "h-[420px]",
+  focusPersonaId = null,
+  chatPersonaIds,
 }: PersonaPanelProps) {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -316,7 +373,7 @@ function PersonaPanel({
   const [view, setView] = useState<"grid" | "list">("list");
   const [sort, setSort] = useState<PersonaSort>(DEFAULT_SORT);
   const sortLabel =
-    SORT_OPTIONS.find((o) => o.value === sort)?.label ?? SORT_OPTIONS[0].label;
+    SORT_OPTIONS.find((o) => o.value === sort)?.short ?? SORT_OPTIONS[0].short;
   // Which dataset's personas to show; "all" shows every persona.
   const [sourceFilter, setSourceFilter] = useState<"all" | DataSourceKey>(
     "all",
@@ -415,6 +472,25 @@ function PersonaPanel({
     setExpandedRows({});
   }, [sourceFilter, panelView, sort]);
 
+  // Opened on one persona: once it has loaded, show it in the list with its
+  // evidence open, scrolled into view and lightly highlighted. Applied once,
+  // so collapsing it afterwards sticks.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const highlightRowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusPersonaId || highlightId === focusPersonaId) return;
+    if (!allPersonas.some((p) => p.persona_id === focusPersonaId)) return;
+    setPanelView("personas");
+    setView("list");
+    setSourceFilter("all");
+    setOpenEvidence((prev) => ({ ...prev, [focusPersonaId]: true }));
+    setHighlightId(focusPersonaId);
+  }, [focusPersonaId, allPersonas, highlightId]);
+  useEffect(() => {
+    if (!highlightId) return;
+    highlightRowRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [highlightId]);
+
   // A persona that matched too few respondents can't be chatted with — never
   // selectable, never part of "select all", never a valid chat target, even if
   // a disabled control were somehow bypassed (checked again in startChat below).
@@ -424,6 +500,12 @@ function PersonaPanel({
   const selectedPersonas = useMemo(
     () => personas.filter((p) => selected[p.persona_id]),
     [personas, selected],
+  );
+
+  // Whether any persona on screen carries the "built in this chat" edge.
+  const showsChatPersonas = useMemo(
+    () => Boolean(chatPersonaIds?.size) && personas.some((p) => chatPersonaIds?.has(p.persona_id)),
+    [chatPersonaIds, personas],
   );
 
   const selectablePersonas = useMemo(
@@ -494,6 +576,8 @@ function PersonaPanel({
           label="Personas Created"
           active={panelView === "personas"}
           onClick={() => setPanelView("personas")}
+          // Shown from the list too, so only a placeholder while neither is in.
+          loading={!summary && dashboardQuery.isLoading && personasQuery.isLoading}
         />
         <SummaryCard
           icon={<XCircle className="h-5 w-5 text-red-700" />}
@@ -502,6 +586,7 @@ function PersonaPanel({
           label="Insufficient Data"
           active={panelView === "insufficient"}
           onClick={() => setPanelView("insufficient")}
+          loading={!summary && dashboardQuery.isLoading}
         />
         <SummaryCard
           icon={<BarChart3 className="h-5 w-5 text-foreground" />}
@@ -510,6 +595,7 @@ function PersonaPanel({
           label="Data Files"
           active={panelView === "files"}
           onClick={() => setPanelView("files")}
+          loading={!summary && dashboardQuery.isLoading}
         />
       </div>
 
@@ -528,12 +614,25 @@ function PersonaPanel({
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-            <p className="text-sm font-medium text-foreground">
-              {panelView === "insufficient"
-                ? "Insufficient data personas"
-                : "Personas"}
-              {personas.length > 0 ? ` · ${personas.length}` : ""}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="text-sm font-medium text-foreground">
+                {panelView === "insufficient"
+                  ? "Insufficient data personas"
+                  : "Personas"}
+                {personas.length > 0 ? ` · ${personas.length}` : ""}
+              </p>
+              {/* Key for the edge tab, only while a marked persona is on screen. */}
+              {showsChatPersonas && (
+                <span
+                  aria-hidden="true"
+                  data-testid="chat-personas-legend"
+                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground duration-200 animate-in fade-in"
+                >
+                  <span className="h-3 w-[3px] rounded-full bg-primary/70" />
+                  Built in this chat
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -545,8 +644,7 @@ function PersonaPanel({
                     Sort: {sortLabel}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                <DropdownMenuContent align="end" className={PICK_MENU}>
                   <DropdownMenuRadioGroup
                     value={sort}
                     onValueChange={(v) => {
@@ -558,12 +656,9 @@ function PersonaPanel({
                       <DropdownMenuRadioItem
                         key={o.value}
                         value={o.value}
-                        className="text-xs"
+                        className={PICK_ITEM}
                       >
                         {o.label}
-                        <span className="ml-auto pl-3 text-muted-foreground">
-                          {o.hint}
-                        </span>
                       </DropdownMenuRadioItem>
                     ))}
                   </DropdownMenuRadioGroup>
@@ -598,28 +693,21 @@ function PersonaPanel({
                     )}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent position="popper" align="end">
-                  <SelectItem value="all" className="text-xs">
-                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <SelectContent position="popper" align="end" className={PICK_MENU}>
+                  <SelectItem value="all" className={cn(PICK_ITEM, COUNTED_ITEM)}>
                     All sources
-                    <span className="ml-auto tabular-nums text-muted-foreground">
+                    <span className="ml-auto pl-4 tabular-nums text-muted-foreground">
                       {allPersonas.length}
                     </span>
                   </SelectItem>
-                  <SelectSeparator />
-                  {DATA_SOURCE_KEYS.map((key) => {
-                    const meta = DATA_SOURCE_META[key];
-                    const Icon = meta.icon;
-                    return (
-                      <SelectItem key={key} value={key} className="text-xs">
-                        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                        {meta.label}
-                        <span className="ml-auto pl-3 tabular-nums text-muted-foreground">
-                          {sourceCounts[key]}
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
+                  {DATA_SOURCE_KEYS.map((key) => (
+                    <SelectItem key={key} value={key} className={cn(PICK_ITEM, COUNTED_ITEM)}>
+                      {DATA_SOURCE_META[key].label}
+                      <span className="ml-auto pl-4 tabular-nums text-muted-foreground">
+                        {sourceCounts[key]}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <div
@@ -691,6 +779,24 @@ function PersonaPanel({
                   ))}
                 </div>
               )
+            ) : personasQuery.isError && allPersonas.length === 0 ? (
+              // A failed load is not an empty project.
+              <EmptyState
+                className="h-[400px] justify-center"
+                icon={<XCircle className="h-6 w-6" />}
+                title="Couldn't load the personas"
+                description="Check your connection and try again."
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={personasQuery.isFetching}
+                    onClick={() => personasQuery.refetch()}
+                  >
+                    Try again
+                  </Button>
+                }
+              />
             ) : allPersonas.length === 0 ? (
               <EmptyState
                 className="h-[400px] justify-center"
@@ -731,7 +837,7 @@ function PersonaPanel({
               />
             ) : view === "list" ? (
               <div className="flex flex-col gap-2.5 p-1">
-                {personas.map((persona) => {
+                {personas.map((persona, index) => {
                   const isSelected = Boolean(selected[persona.persona_id]);
                   const isPending = pendingId === persona.persona_id;
                   const dash = evidenceByPersona.get(persona.persona_id);
@@ -747,14 +853,27 @@ function PersonaPanel({
                   const isEvidenceOpen = Boolean(
                     openEvidence[persona.persona_id],
                   );
+                  const isHighlighted = highlightId === persona.persona_id;
+                  const fromThisChat = Boolean(chatPersonaIds?.has(persona.persona_id));
                   return (
                     <div
                       key={persona.persona_id}
+                      ref={isHighlighted ? highlightRowRef : undefined}
+                      aria-current={isHighlighted ? "true" : undefined}
+                      data-from-chat={fromThisChat || undefined}
+                      // Rows arrive one after another, like the grid's cards.
+                      style={{
+                        animationDelay: `${Math.min(index, 12) * 40}ms`,
+                        animationFillMode: "backwards",
+                      }}
                       className={cn(
-                        "rounded-xl border bg-card ring-1 ring-foreground/5 transition-shadow hover:shadow-md",
+                        "relative scroll-mt-1 rounded-xl border bg-card ring-1 ring-foreground/5 transition-[box-shadow,background-color,border-color] duration-300 hover:shadow-md",
+                        "animate-in fade-in slide-in-from-bottom-1 motion-reduce:animate-none",
+                        isHighlighted && "border-primary/30 bg-primary/[0.03]",
                         isSelected && "ring-2 ring-primary",
                       )}
                     >
+                      {fromThisChat && <FromThisChatEdge />}
                       <div className="flex items-center gap-3 p-3">
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -969,15 +1088,15 @@ function PersonaPanel({
                           )}
                         </Tooltip>
                       </div>
-                      {isEvidenceOpen && dashHasEvidence && (
-                        <div className="border-t p-3 duration-200 animate-in fade-in slide-in-from-top-1">
+                      {dashHasEvidence && (
+                        <Collapse open={isEvidenceOpen} className="border-t p-3">
                           <PersonaEvidence
                             data={dash}
                             showCoverage={false}
                             evidenceCols={2}
                             collapsible={false}
                           />
-                        </div>
+                        </Collapse>
                       )}
                     </div>
                   );
@@ -992,15 +1111,17 @@ function PersonaPanel({
                   const isExpanded = Boolean(expandedRows[rowIndex]);
                   const dash = evidenceByPersona.get(persona.persona_id);
                   const isInsufficient = Boolean(dash?.insufficient_data);
+                  const fromThisChat = Boolean(chatPersonaIds?.has(persona.persona_id));
                   return (
                     <Card
                       key={persona.persona_id}
+                      data-from-chat={fromThisChat || undefined}
                       style={{
                         animationDelay: `${Math.min(index, 12) * 40}ms`,
                         animationFillMode: "backwards",
                       }}
                       className={cn(
-                        "flex flex-col transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 hover:shadow-md",
+                        "relative flex flex-col transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 hover:shadow-md",
                         // Collapsed: fixed height, evidence scrolls inside. Expanded:
                         // drop the cap and stretch to the row's tallest card so every
                         // card in the row ends up the same height.
@@ -1008,6 +1129,7 @@ function PersonaPanel({
                         isSelected && "ring-2 ring-primary",
                       )}
                     >
+                      {fromThisChat && <FromThisChatEdge />}
                       <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-3">
@@ -1228,7 +1350,7 @@ function PersonaPanel({
                 onClick={() =>
                   startChat(
                     selectedPersonas.map((p) => p.persona_id),
-                    groupTitle(
+                    groupChatTitle(
                       selectedPersonas.map((p) => p.persona_name ?? "Persona"),
                     ),
                     "group",

@@ -117,7 +117,9 @@ export function useGroupChatStream({ setLiveMessages, readAloud }: UseGroupChatS
       const pending = new Map<string, string>(); // bubble id -> not yet rendered
       const completed = new Set<string>(); // persona_ids whose reply is whole
       const voiced = new Set<string>(); // bubble ids opened in the speech player
-      let announced: string[] = [];
+      // An off-topic question gets one reply for the whole group, not one per
+      // persona: its bubble id, once the fallback starts streaming.
+      let fallbackId: string | null = null;
       let raf: number | null = null;
 
       const isLive = () => !controller.signal.aborted && isCurrentGroup();
@@ -144,9 +146,9 @@ export function useGroupChatStream({ setLiveMessages, readAloud }: UseGroupChatS
         if (raf == null) raf = requestAnimationFrame(flush);
       };
 
-      const startVoice = (id: string, pid: string) => {
+      const startVoice = (id: string, speakerKey?: string) => {
         if (!readAloudRef.current) return;
-        speechPlayer.open({ id, speakerKey: nameOf.get(pid), groupId });
+        speechPlayer.open({ id, speakerKey, groupId });
         voiced.add(id);
       };
       const voice = (id: string, delta: string) => {
@@ -160,41 +162,47 @@ export function useGroupChatStream({ setLiveMessages, readAloud }: UseGroupChatS
         speechPlayer.discard(id);
       };
 
+      /** Put a new bubble on screen and, with read-aloud on, open its utterance. */
+      const openBubble = (bubble: GroupMessageT, speakerKey?: string) => {
+        textOf.set(bubble.id, bubble.message);
+        setLiveMessages((prev) => [...prev, bubble]);
+        // A reply is on screen: the thinking indicator has done its job.
+        setIsWaiting(false);
+        startVoice(bubble.id, speakerKey);
+        if (bubble.message) voice(bubble.id, bubble.message);
+      };
+
+      /** Add streamed text to a bubble already on screen. */
+      const appendTo = (id: string, delta: string) => {
+        textOf.set(id, (textOf.get(id) ?? "") + delta);
+        pending.set(id, (pending.get(id) ?? "") + delta);
+        scheduleFlush();
+        voice(id, delta);
+      };
+
       /** The persona's bubble, created on first use. */
       const ensureBubble = (pid: string, initial = ""): string => {
         const existing = bubbleOf.get(pid);
         if (existing) return existing;
         const id = crypto.randomUUID();
         bubbleOf.set(pid, id);
-        textOf.set(id, initial);
-        setLiveMessages((prev) => [
-          ...prev,
-          {
-            id,
-            role: "persona",
-            persona_id: pid,
-            persona_name: nameOf.get(pid),
-            message: initial,
-          },
-        ]);
-        // A reply is on screen: the thinking indicator has done its job.
-        setIsWaiting(false);
-        startVoice(id, pid);
-        if (initial) voice(id, initial);
+        const name = nameOf.get(pid);
+        openBubble({ id, role: "persona", persona_id: pid, persona_name: name, message: initial }, name);
         return id;
       };
 
       const appendDelta = (pid: string, delta: string) => {
         if (!delta) return;
         const id = bubbleOf.get(pid);
-        if (!id) {
-          ensureBubble(pid, delta);
-          return;
-        }
-        textOf.set(id, (textOf.get(id) ?? "") + delta);
-        pending.set(id, (pending.get(id) ?? "") + delta);
-        scheduleFlush();
-        voice(id, delta);
+        if (id) appendTo(id, delta);
+        else ensureBubble(pid, delta);
+      };
+
+      const appendFallback = (delta: string) => {
+        if (!delta) return;
+        if (fallbackId) return appendTo(fallbackId, delta);
+        fallbackId = crypto.randomUUID();
+        openBubble({ id: fallbackId, role: "system", message: delta });
       };
 
       const abort = () => {
@@ -212,7 +220,6 @@ export function useGroupChatStream({ setLiveMessages, readAloud }: UseGroupChatS
           onStart: ({ personas }) => {
             if (!isLive()) return;
             personas.forEach((p) => nameOf.set(p.persona_id, p.persona_name));
-            announced = personas.map((p) => p.persona_id);
           },
           onPersonaDelta: ({ persona_id, delta, replace }) => {
             if (!isLive() || !nameOf.has(persona_id)) return;
@@ -230,14 +237,13 @@ export function useGroupChatStream({ setLiveMessages, readAloud }: UseGroupChatS
             patchBubble(id, { message: delta });
             if (voiced.has(id)) {
               dropVoice(id);
-              startVoice(id, persona_id);
+              startVoice(id, nameOf.get(persona_id));
               voice(id, delta);
             }
           },
           onFallbackDelta: ({ delta }) => {
             if (!isLive()) return;
-            // An off-topic question gets the same polite reply from everyone.
-            announced.forEach((pid) => appendDelta(pid, delta));
+            appendFallback(delta);
           },
           onPersonaDone: ({ persona_id, confidence_level }) => {
             if (!isLive()) return;
@@ -254,6 +260,15 @@ export function useGroupChatStream({ setLiveMessages, readAloud }: UseGroupChatS
             touchSession(groupId);
             if (!isLive()) return;
             flush();
+            // The server saves the fallback once per persona; it stays one bubble.
+            if (fallbackId || (responses.length > 0 && responses.every((r) => r.is_fallback))) {
+              const text = responses[0]?.response;
+              if (!fallbackId) appendFallback(text ?? "");
+              else if (text) patchBubble(fallbackId, { message: text });
+              if (fallbackId) endVoice(fallbackId);
+              onSaved?.();
+              return;
+            }
             const saved = new Map(responses.map((r) => [r.persona_id, r]));
             // Every saved reply gets a bubble (and its voice), even one that
             // never streamed text.
@@ -299,12 +314,14 @@ export function useGroupChatStream({ setLiveMessages, readAloud }: UseGroupChatS
                 ? [...completed].map((pid) => bubbleOf.get(pid)).filter(Boolean)
                 : [],
             );
-            const drop = new Set([...bubbleOf.values()].filter((id) => !keep.has(id)));
+            // A fallback only counts once `done` confirms it, so it always goes.
+            const bubbles = [...bubbleOf.values(), ...(fallbackId ? [fallbackId] : [])];
+            const drop = new Set(bubbles.filter((id) => !keep.has(id)));
             if (drop.size > 0) {
               setLiveMessages((prev) => prev.filter((m) => !drop.has(m.id)));
             }
             // Cut-off replies stop mid-sentence; finished ones are read to the end.
-            bubbleOf.forEach((id) => (drop.has(id) ? dropVoice(id) : endVoice(id)));
+            bubbles.forEach((id) => (drop.has(id) ? dropVoice(id) : endVoice(id)));
             toast.error(interrupted ? STREAM_INTERRUPTED_SAVED_MESSAGE : message);
             onFailed?.(message);
           },

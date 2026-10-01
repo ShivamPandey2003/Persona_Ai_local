@@ -26,7 +26,7 @@ type LoadingMessageProps = {
  * one; restarts from 0 when the phrase list changes. The reset is derived during
  * render (keyed by `resetKey`) rather than set from an effect.
  */
-function usePhraseIndex(count: number, resetKey: string): number {
+export function usePhraseIndex(count: number, resetKey: string): number {
   const [state, setState] = useState({ key: resetKey, index: 0 })
   const index = state.key === resetKey ? state.index : 0
 

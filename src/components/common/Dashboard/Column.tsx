@@ -27,7 +27,10 @@ const Column: ColumnDef<Project, any>[] = [
           to={"/chat"}
           state={{ projectId: ProjectId }}
         >
-          <div className="w-full cursor-pointer py-1">{getValue()}</div>
+          {/* Turns purple on row hover (see DataTable's row). */}
+          <div className="w-full cursor-pointer py-1 transition-colors duration-200 group-hover/row:text-[#6338F6] group-focus-within/row:text-[#6338F6] motion-reduce:transition-none">
+            {getValue()}
+          </div>
         </Link>
       );
     },

@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
-import ProjectReducer, { setProjects, setPersonaDialog } from "../../redux/ProjectSlice";
+import ProjectReducer, {
+  setProjects,
+  setPersonaDialog,
+  openPersonaDialogFor,
+} from "../../redux/ProjectSlice";
 import { makeProject } from "@/test/factories";
 
-const initial = { projects: [], personaDialog: false };
+const initial = { projects: [], personaDialog: false, personaDialogFocus: null };
 
 describe("ProjectSlice", () => {
   it("returns the initial state", () => {
@@ -28,5 +32,17 @@ describe("ProjectSlice", () => {
     expect(opened.projects).toEqual(seeded.projects);
 
     expect(ProjectReducer(opened, setPersonaDialog(false)).personaDialog).toBe(false);
+  });
+
+  it("openPersonaDialogFor opens the dialog on one persona", () => {
+    const state = ProjectReducer(undefined, openPersonaDialogFor("pa"));
+    expect(state.personaDialog).toBe(true);
+    expect(state.personaDialogFocus).toBe("pa");
+  });
+
+  it("any plain open or close forgets the focused persona", () => {
+    const focused = ProjectReducer(undefined, openPersonaDialogFor("pa"));
+    expect(ProjectReducer(focused, setPersonaDialog(false)).personaDialogFocus).toBeNull();
+    expect(ProjectReducer(focused, setPersonaDialog(true)).personaDialogFocus).toBeNull();
   });
 });

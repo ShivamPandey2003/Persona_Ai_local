@@ -22,18 +22,30 @@ export const Login = () => {
   const login = useMutation<LoginRes,Record<string, any>, LoginPayload>({
     mutationKey: ["Login"],
     mutationFn: async (payload) => {
-      const res = await apiRequest("post", "users/login", payload);
-      const data = await res;
-      return data.response;
+      // `credentials`: a 401 here is a rejected sign-in, not an expired
+      // session. `silent`: onError toasts every failure, including our own.
+      const res = await apiRequest("post", "users/login", payload, "json", {
+        credentials: true,
+        silent: true,
+      });
+      const data: LoginRes | undefined = res?.response;
+      // Never store a "session" without a token to back it.
+      if (!data?.response?.token) {
+        throw new Error("We couldn't sign you in. Please try again.");
+      }
+      return data;
     },
     onSuccess:(data)=>{
         localStorage.setItem("user", btoa(JSON.stringify(data.response)))
         toast.success("Logged in successfully")
         navigate('/dashboard')
     },
-    // Login failures are surfaced with a backend-driven error toast by the
-    // shared `apiRequest` layer, so no extra error toast is needed here (it
-    // would otherwise show the same message twice).
+    onError: (error) => {
+        // One id, so repeated failed attempts replace the toast instead of stacking.
+        toast.error(error?.message || "We couldn't sign you in. Please try again.", {
+            id: "login-error",
+        })
+    },
   });
 
   return login

@@ -247,7 +247,7 @@ describe("GroupChatView voice", () => {
     expect(voiced).toHaveLength(1);
   });
 
-  it("reads an off-topic fallback reply once per persona", async () => {
+  it("reads an off-topic fallback reply once, not once per persona", async () => {
     localStorage.setItem(SPEAKER_PREFERENCE_KEY, "on");
     seedChat();
     const fallback = "Let's keep to the product.";
@@ -269,6 +269,7 @@ describe("GroupChatView voice", () => {
               persona_name: i === 0 ? "Ann" : "Bob",
               response: fallback,
               evidence_tags: [],
+              is_fallback: 1,
             })),
           },
         ]),
@@ -278,13 +279,8 @@ describe("GroupChatView voice", () => {
     await screen.findByRole("button", { name: /stop reading replies aloud/i });
     await user.type(await screen.findByPlaceholderText(/message everyone/i), "Weather?{Enter}");
 
-    await waitFor(() => expect(screen.getAllByText(fallback)).toHaveLength(2));
-    await waitFor(() =>
-      expect(spoken()).toEqual([
-        ["Ann", fallback, true],
-        ["Bob", fallback, true],
-      ]),
-    );
+    await waitFor(() => expect(spoken()).toEqual([[undefined, fallback, true]]));
+    expect(screen.getAllByText(fallback)).toHaveLength(1);
   });
 
   it("stops reading a reply that the server failed", async () => {

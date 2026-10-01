@@ -204,4 +204,53 @@ describe("apiRequest", () => {
       expect(sessionStorage.getItem("k")).toBeNull();
     });
   });
+
+  describe("on a sign-in request (credentials)", () => {
+    it("reports a 401 as rejected credentials and leaves the session alone", async () => {
+      localStorage.setItem("keep", "me");
+      server.use(
+        http.post(endpoint("login-401"), () =>
+          HttpResponse.json({ header: { code: 401, message: "Invalid credentials." } }),
+        ),
+      );
+
+      await expect(
+        apiRequest("post", "login-401", {}, "json", { credentials: true, silent: true }),
+      ).rejects.toThrow("Invalid credentials.");
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(localStorage.getItem("keep")).toBe("me");
+    });
+
+    it("falls back to a credentials message, not 'session expired'", async () => {
+      server.use(
+        http.post(endpoint("login-401-bare"), () =>
+          HttpResponse.json({ header: { code: 401, message: "error" } }),
+        ),
+      );
+
+      await expect(
+        apiRequest("post", "login-401-bare", {}, "json", { credentials: true }),
+      ).rejects.toThrow("Incorrect email or password.");
+      // Not silent: the failure is toasted once.
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      expect(toast.error).toHaveBeenCalledWith("Incorrect email or password.");
+    });
+
+    it("treats an HTTP 401 the same way", async () => {
+      localStorage.setItem("keep", "me");
+      server.use(
+        http.post(endpoint("login-http-401"), () =>
+          HttpResponse.json(
+            { header: { code: 401, message: "Invalid credentials." } },
+            { status: 401 },
+          ),
+        ),
+      );
+
+      await expect(
+        apiRequest("post", "login-http-401", {}, "json", { credentials: true, silent: true }),
+      ).rejects.toThrow("Invalid credentials.");
+      expect(localStorage.getItem("keep")).toBe("me");
+    });
+  });
 });

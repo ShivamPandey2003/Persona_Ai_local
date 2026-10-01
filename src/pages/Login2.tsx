@@ -7,32 +7,71 @@ import {
   Brain,
   Loader,
 } from "lucide-react";
-import { useState, type MouseEvent } from "react";
+import { useRef, useState, type AnimationEvent, type FormEvent } from "react";
 // import { useNavigate } from "react-router";
 // import Users from "@/data/DummyUser.json";
 // import { toast } from "sonner";
 import { Login } from "@/api/Auth/mutation";
 import { aesEncrypt } from "@/lib/encryption&decryption";
 import AuroraBackground from "@/components/global/AuroraBackground";
+import { cn } from "@/lib/utils";
+import {
+  validateCredentials,
+  type Credentials,
+  type CredentialErrors,
+} from "@/lib/validateCredentials";
+
+const INPUT_BASE =
+  "w-full h-14 rounded-2xl bg-[#F8F9FB] border pl-14 pr-5 outline-none transition-all";
 
 export default function PersonaAILoginPage() {
-  const [userCred, setUserCred] = useState<{ email: string; password: string }>(
-    {
-      email: "",
-      password: "",
-    },
-  );
+  const [userCred, setUserCred] = useState<Credentials>({
+    email: "",
+    password: "",
+  });
+  const [fieldErrors, setFieldErrors] = useState<CredentialErrors>({});
+  const [shaking, setShaking] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  // Sign-in failures are toasted by the hook; the form only shakes.
   const { mutate, isPending } = Login();
 
-  const OnSubmit = (e: MouseEvent<HTMLButtonElement>) => {
+  // Replays from the start even if a shake is still running.
+  const shake = () => {
+    setShaking(false);
+    requestAnimationFrame(() => setShaking(true));
+  };
+
+  const updateField = (field: keyof Credentials, value: string) => {
+    setUserCred((prev) => ({ ...prev, [field]: value }));
+    // Editing clears that field's message.
+    if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isPending) return;
 
-    const payload = {
-      email: aesEncrypt(userCred.email),
-      password: aesEncrypt(userCred.password),
-    };
+    const errors = validateCredentials(userCred);
+    setFieldErrors(errors);
+    if (errors.email || errors.password) {
+      shake();
+      (errors.email ? emailRef : passwordRef).current?.focus();
+      return;
+    }
 
-    mutate(payload);
+    mutate(
+      {
+        email: aesEncrypt(userCred.email.trim()),
+        password: aesEncrypt(userCred.password),
+      },
+      { onError: shake },
+    );
+  };
+
+  // Only the form's own shake ends it (child animations bubble here too).
+  const onAnimationEnd = (e: AnimationEvent<HTMLFormElement>) => {
+    if (e.target === e.currentTarget && e.animationName === "shake") setShaking(false);
   };
 
   return (
@@ -160,10 +199,21 @@ export default function PersonaAILoginPage() {
               </div>
 
               {/* FORM */}
-              <div className="space-y-6">
+              <form
+                noValidate
+                onSubmit={onSubmit}
+                onAnimationEnd={onAnimationEnd}
+                className={cn(
+                  "space-y-6",
+                  shaking && "animate-[shake_0.45s_ease-in-out] motion-reduce:animate-none",
+                )}
+              >
                 {/* EMAIL */}
                 <div>
-                  <label className="text-sm font-medium text-[#374151] block mb-3">
+                  <label
+                    htmlFor="login-email"
+                    className="text-sm font-medium text-[#374151] block mb-3"
+                  >
                     Email Address <span className="text-red-500">*</span>
                   </label>
 
@@ -174,25 +224,42 @@ export default function PersonaAILoginPage() {
                     />
 
                     <input
+                      ref={emailRef}
+                      id="login-email"
+                      name="email"
                       data-test-id="EMAIL"
                       value={userCred.email}
-                      onChange={(e) =>
-                        setUserCred((pre) => ({
-                          ...pre,
-                          email: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => updateField("email", e.target.value)}
                       disabled={isPending}
                       type="email"
+                      autoComplete="email"
                       placeholder="Enter your email"
-                      className="w-full h-14 rounded-2xl bg-[#F8F9FB] border border-[#ECECEC] pl-14 pr-5 outline-none focus:border-[#6338F6] transition-all"
+                      aria-invalid={fieldErrors.email ? true : undefined}
+                      aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
+                      className={cn(
+                        INPUT_BASE,
+                        fieldErrors.email
+                          ? "border-red-400 focus:border-red-500"
+                          : "border-[#ECECEC] focus:border-[#6338F6]",
+                      )}
                     />
                   </div>
+                  {fieldErrors.email && (
+                    <p
+                      id="login-email-error"
+                      className="mt-2 text-sm text-red-600 duration-200 animate-in fade-in slide-in-from-top-1"
+                    >
+                      {fieldErrors.email}
+                    </p>
+                  )}
                 </div>
 
                 {/* PASSWORD */}
                 <div>
-                  <label className="text-sm font-medium text-[#374151] block mb-3">
+                  <label
+                    htmlFor="login-password"
+                    className="text-sm font-medium text-[#374151] block mb-3"
+                  >
                     Password <span className="text-red-500">*</span>
                   </label>
 
@@ -203,20 +270,36 @@ export default function PersonaAILoginPage() {
                     />
 
                     <input
+                      ref={passwordRef}
+                      id="login-password"
+                      name="password"
                       data-test-id="PASSWORD"
                       value={userCred.password}
-                      onChange={(e) =>
-                        setUserCred((pre) => ({
-                          ...pre,
-                          password: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => updateField("password", e.target.value)}
                       disabled={isPending}
                       type="password"
+                      autoComplete="current-password"
                       placeholder="Enter your password"
-                      className="w-full h-14 rounded-2xl bg-[#F8F9FB] border border-[#ECECEC] pl-14 pr-5 outline-none focus:border-[#6338F6] transition-all"
+                      aria-invalid={fieldErrors.password ? true : undefined}
+                      aria-describedby={
+                        fieldErrors.password ? "login-password-error" : undefined
+                      }
+                      className={cn(
+                        INPUT_BASE,
+                        fieldErrors.password
+                          ? "border-red-400 focus:border-red-500"
+                          : "border-[#ECECEC] focus:border-[#6338F6]",
+                      )}
                     />
                   </div>
+                  {fieldErrors.password && (
+                    <p
+                      id="login-password-error"
+                      className="mt-2 text-sm text-red-600 duration-200 animate-in fade-in slide-in-from-top-1"
+                    >
+                      {fieldErrors.password}
+                    </p>
+                  )}
                 </div>
 
                 {/* OPTIONS */}
@@ -229,15 +312,18 @@ export default function PersonaAILoginPage() {
                     Remember me
                   </label>
 
-                  <button className="text-[#6338F6] font-medium hover:opacity-80 transition-all">
+                  <button
+                    type="button"
+                    className="text-[#6338F6] font-medium hover:opacity-80 transition-all"
+                  >
                     Forgot Password?
                   </button>
                 </div>
 
                 {/* LOGIN BUTTON */}
                 <button
+                  type="submit"
                   data-test-id="SUBMIT"
-                  onClick={OnSubmit}
                   className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#6338F6] to-[#8B5CF6] text-white font-medium shadow-[0_15px_35px_rgba(99,56,246,0.35)] hover:scale-[1.01] transition-all duration-300"
                   disabled={isPending}
                 >
@@ -274,7 +360,7 @@ export default function PersonaAILoginPage() {
                 >
                   Continue with Google
                 </button> */}
-              </div>
+              </form>
 
               {/* FOOTER */}
               {/* <div className="mt-10 text-center">

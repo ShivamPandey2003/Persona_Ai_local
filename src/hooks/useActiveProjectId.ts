@@ -6,6 +6,11 @@ export function chatIdFromPath(pathname: string): string | undefined {
   return pathname.match(/^\/(?:group-chat|chat)\/([^/]+)/)?.[1];
 }
 
+/** The persona-builder conversation id in a pathname — never a group chat's. */
+export function builderChatIdFromPath(pathname: string): string | undefined {
+  return pathname.match(/^\/chat\/([^/]+)/)?.[1];
+}
+
 /**
  * Resolves the project a chat route belongs to.
  *

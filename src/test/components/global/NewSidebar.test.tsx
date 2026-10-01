@@ -31,11 +31,11 @@ describe("NewAppSidebar", () => {
   it("renders the brand and core navigation links", () => {
     renderSidebar("/dashboard");
     expect(screen.getByText("Persona AI")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/dashboard");
     expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
     expect(screen.getByText("Navigation")).toBeInTheDocument();
-    // Home is reached through the logo, so it has no entry of its own.
-    expect(screen.queryByRole("link", { name: /home/i })).not.toBeInTheDocument();
+    // The projects dashboard is labelled Home; there is no separate Dashboard item.
+    expect(screen.queryByRole("link", { name: /dashboard/i })).not.toBeInTheDocument();
   });
 
   it("does not show chat actions outside of chat routes", () => {
@@ -161,18 +161,19 @@ describe("NewAppSidebar", () => {
     });
   });
 
-  it.each([
-    [/new chat/i, "Build a new persona"],
-    [/start group chat/i, "Chat with several personas at once"],
-  ])("explains %s on hover", async (name, hint) => {
-    server.use(
-      http.post(`${API_URL}persona/chat-list`, () => ok({ builder_chats: [], group_chats: [] })),
-    );
-    const { user } = renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
+  it.each([/new chat/i, /start group chat/i])(
+    "shows no hover hint on %s while the sidebar is expanded",
+    async (name) => {
+      server.use(
+        http.post(`${API_URL}persona/chat-list`, () => ok({ builder_chats: [], group_chats: [] })),
+      );
+      const { user } = renderSidebar({ pathname: "/chat/c1", state: { projectId: "p1" } });
 
-    await user.hover(screen.getByRole("button", { name }));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(hint);
-  });
+      await user.hover(screen.getByRole("button", { name }));
+      await new Promise((r) => setTimeout(r, 300));
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    },
+  );
 
   it("disables New chat until a project is known", () => {
     renderSidebar("/chat");

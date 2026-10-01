@@ -22,6 +22,9 @@ const STATUS_MESSAGES: Record<number, string> = {
 };
 
 const GENERIC_MESSAGE = "Something went wrong. Please try again.";
+
+/** A rejected sign-in, when the backend doesn't say more. */
+export const INVALID_CREDENTIALS_MESSAGE = "Incorrect email or password.";
 const NETWORK_MESSAGE =
   "Network error. Please check your connection and try again.";
 
@@ -36,14 +39,17 @@ function isUsableBackendMessage(message?: string | null): message is string {
 
 /**
  * Resolve the message to show the user for a given status code.
- * Prefers a meaningful backend message, then a code-specific default,
- * then a generic fallback.
+ * Prefers a meaningful backend message, then `fallback` when the caller knows
+ * better than the status code (e.g. a 401 on sign-in means wrong credentials,
+ * not an expired session), then a code-specific default, then a generic one.
  */
 export function getApiErrorMessage(
   code?: number,
   backendMessage?: string | null,
+  fallback?: string,
 ): string {
   if (isUsableBackendMessage(backendMessage)) return backendMessage;
+  if (fallback) return fallback;
   if (code && STATUS_MESSAGES[code]) return STATUS_MESSAGES[code];
   if (code && code >= 500) return STATUS_MESSAGES[500];
   if (code && code >= 400) return STATUS_MESSAGES[400];

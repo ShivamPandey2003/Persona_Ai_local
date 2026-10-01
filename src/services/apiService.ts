@@ -1,6 +1,10 @@
 import axios from "axios";
 import { toast } from "sonner";
-import { getApiErrorMessage, getNetworkErrorMessage } from "@/lib/apiError";
+import {
+  getApiErrorMessage,
+  getNetworkErrorMessage,
+  INVALID_CREDENTIALS_MESSAGE,
+} from "@/lib/apiError";
 
 const platform_url = import.meta.env.VITE_REACT_APP_API_URL;
 
@@ -12,9 +16,15 @@ export type ApiRequestOptions = {
   timeoutMs?: number;
   /**
    * Don't toast failures — the caller reports them (e.g. to collapse repeats).
-   * A 401 still toasts and ends the session.
+   * A 401 still toasts and ends the session, unless `credentials` is set.
    */
   silent?: boolean;
+  /**
+   * The request signs in, so there is no session to expire: a 401 means the
+   * credentials were rejected. It is reported like any other failure (thrown,
+   * toasted unless `silent`) instead of clearing storage and reloading the app.
+   */
+  credentials?: boolean;
 };
 
 const apiClient = axios.create({
@@ -85,6 +95,12 @@ export const apiRequest = async (
   const notify = (message: string) => {
     if (!options.silent) toast.error(message);
   };
+  // A rejected sign-in (see ApiRequestOptions.credentials).
+  const rejectCredentials = (backendMessage?: string, cause?: unknown): never => {
+    const text = getApiErrorMessage(401, backendMessage, INVALID_CREDENTIALS_MESSAGE);
+    notify(text);
+    throw new Error(text, cause === undefined ? undefined : { cause });
+  };
 
   try {
     // const requestHeaders = { ...headers };
@@ -105,6 +121,7 @@ export const apiRequest = async (
       const message: string | undefined = body?.header?.message ?? body?.message;
 
       if (code === 401) {
+        if (options.credentials) rejectCredentials(message);
         toast.error(getApiErrorMessage(401, message));
         handleSessionExpiration();
         return body;
@@ -170,6 +187,7 @@ export const apiRequest = async (
       error?.data?.header?.message ?? error?.response?.data?.header?.message;
 
     if (status === 401) {
+      if (options.credentials) rejectCredentials(backendMessage, error);
       const message401 = getApiErrorMessage(401, backendMessage);
       toast.error(message401);
       handleSessionExpiration();

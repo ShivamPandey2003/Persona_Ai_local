@@ -43,6 +43,8 @@ export type SavedPersonaReply = {
   evidence_tags: string[];
   confidence_level?: string | null;
   confidence_score?: number | null;
+  /** 1 when the personas didn't answer and this is the shared fallback text. */
+  is_fallback?: number | boolean;
 };
 
 export type StreamStart = {

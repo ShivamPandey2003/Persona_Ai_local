@@ -67,6 +67,67 @@ describe("GroupChatView", () => {
     expect(screen.getByText("Affordability")).toBeInTheDocument();
   });
 
+  it("shows a saved fallback turn once, not once per persona", async () => {
+    seedParticipants();
+    const fallback = "Please attach the image you'd like us to react to.";
+    server.use(
+      http.post(`${API_URL}persona/group-chat/history`, () =>
+        ok({
+          messages: [
+            {
+              user_message: "What do you think of this packaging?",
+              responses: participants.map((p) => ({
+                persona_id: p.persona_id,
+                persona_name: p.persona_name,
+                response: fallback,
+                is_fallback: 1,
+              })),
+            },
+          ],
+          pagination: { total: 1 },
+        }),
+      ),
+    );
+    renderWithProviders(<GroupChatView />);
+
+    expect(await screen.findByText(fallback)).toBeInTheDocument();
+    expect(screen.getAllByText(fallback)).toHaveLength(1);
+    // Not attributed to a persona, so it can't be replied to.
+    expect(screen.queryByText("Ann")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reply to/i })).not.toBeInTheDocument();
+  });
+
+  it("streams a fallback as one reply for the whole group", async () => {
+    seedParticipants();
+    seedNoHistory();
+    const fallback = "That's outside what we can speak to.";
+    server.use(
+      http.post(`${API_URL}persona/group-chat/message/stream`, () =>
+        ndjsonBody([
+          { type: "start", personas: participants },
+          { type: "fallback_delta", delta: "That's outside " },
+          { type: "fallback_delta", delta: "what we can speak to." },
+          {
+            type: "done",
+            responses: participants.map((p) => ({
+              persona_id: p.persona_id,
+              persona_name: p.persona_name,
+              response: fallback,
+              evidence_tags: [],
+              is_fallback: 1,
+            })),
+          },
+        ]),
+      ),
+    );
+    const { user } = renderWithProviders(<GroupChatView />);
+    await user.type(await screen.findByPlaceholderText(/message everyone/i), "Weather?{Enter}");
+
+    expect(await screen.findByText(fallback)).toBeInTheDocument();
+    expect(screen.getAllByText(fallback)).toHaveLength(1);
+    expect(screen.queryByText("Ann")).not.toBeInTheDocument();
+  });
+
   it("shows the chat's name from the chat list", async () => {
     seedParticipants();
     seedNoHistory();
@@ -155,6 +216,31 @@ describe("GroupChatView", () => {
     await waitFor(() =>
       expect(screen.queryByText("Personas are replying")).not.toBeInTheDocument(),
     );
+  });
+
+  it("names the one persona being messaged while it thinks", async () => {
+    // Radix Select opens on pointer events jsdom does not implement.
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    seedParticipants();
+    seedNoHistory();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post(`${API_URL}persona/group-chat/message-single/stream`, async () => {
+        await gate;
+        return ndjsonStream([{ persona_id: "a", persona_name: "Ann", response: "Sure" }]);
+      }),
+    );
+
+    const { user } = renderWithProviders(<GroupChatView />);
+    await user.click(await screen.findByRole("combobox", { name: "Choose who to message" }));
+    await user.click(await screen.findByRole("option", { name: /Ann/ }));
+    await user.type(await screen.findByPlaceholderText(/message ann/i), "Thoughts?{Enter}");
+
+    expect(await screen.findByText("Ann is replying")).toBeInTheDocument();
+    release();
+    expect(await screen.findByText("Sure")).toBeInTheDocument();
   });
 
   it("drops the thinking status as soon as the first persona starts replying", async () => {

@@ -104,6 +104,55 @@ describe("ChatEntry", () => {
     expect(navigateSpy).not.toHaveBeenCalledWith("/upload/p1", { replace: true });
   });
 
+  it("opens the chat screen at once while the builder starts, then hands over its greeting", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post(`${API_URL}persona/list`, () => ok({ personas: [] })),
+      http.post(`${API_URL}persona/chat/message`, async () => {
+        await gate;
+        return ok({
+          id: "conv-new",
+          messages: [{ role: "assistant", content: "Hi! What shall we build?" }],
+          building_persona: 0,
+        });
+      }),
+    );
+    renderWithProviders(<ChatEntry />, atProject({ projectId: "p1", forceNew: true }));
+
+    // The chat layout, with the builder "typing" — not a full-screen loader.
+    expect(await screen.findByText("Starting the persona builder")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Getting the persona builder ready…")).toBeDisabled();
+    expect(screen.queryByText("Starting persona builder…")).not.toBeInTheDocument();
+
+    release();
+    await waitFor(() =>
+      expect(navigateSpy).toHaveBeenCalledWith("/chat/conv-new", {
+        state: {
+          projectId: "p1",
+          opening: { conversationId: "conv-new", message: "Hi! What shall we build?" },
+        },
+        replace: true,
+      }),
+    );
+  });
+
+  it("hands nothing over when the builder sent no greeting", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat/message`, () =>
+        ok({ id: "conv-new", messages: [{ role: "assistant", content: "   " }], building_persona: 0 }),
+      ),
+    );
+    renderWithProviders(<ChatEntry />, atProject({ projectId: "p1", forceNew: true }));
+
+    await waitFor(() =>
+      expect(navigateSpy).toHaveBeenCalledWith("/chat/conv-new", {
+        state: { projectId: "p1" },
+        replace: true,
+      }),
+    );
+  });
+
   it("starts a new builder conversation when the project has no personas", async () => {
     let body: Record<string, unknown> | undefined;
     server.use(

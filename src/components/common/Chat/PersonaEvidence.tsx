@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { DashboardPersona } from "@/api/Persona/query";
 
 /** Coverage-bar fill colour by percentage band (mirrors the persona cards). */
-function coverageColor(value: number): string {
+export function coverageColor(value: number): string {
   if (value >= 80) return "bg-emerald-500";
   if (value >= 70) return "bg-sky-500";
   return "bg-amber-500";

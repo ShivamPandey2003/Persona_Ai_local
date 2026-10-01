@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   Settings,
-  LayoutDashboard,
+  House,
   Plus,
   Users,
   MessageSquare,
@@ -42,30 +42,11 @@ import { useChatList, type RecentChat } from "@/api/Chat/query";
 import { RenameChatDialog } from "../common/Chat/RenameChatDialog";
 import { useActiveProjectId, chatIdFromPath } from "@/hooks/useActiveProjectId";
 
-// Home is reached through the logo, so it has no entry of its own.
+// The projects dashboard is labelled "Home" here.
 const items = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Home", url: "/dashboard", icon: House },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
-
-/**
- * Hover hint for a chat action, shown whether the sidebar is expanded or in
- * icon mode (where the label is hidden, so the hint leads with the name).
- * Touch screens have no hover, so it stays off there.
- */
-function actionTooltip(title: string, hint: string, isCollapsed: boolean, isMobile: boolean) {
-  return {
-    hidden: isMobile,
-    children: isCollapsed ? (
-      <span className="flex flex-col">
-        <span className="font-semibold">{title}</span>
-        <span>{hint}</span>
-      </span>
-    ) : (
-      hint
-    ),
-  };
-}
 
 // Navigation rows. The chat actions use the same look as an inactive row.
 const NAV_ROW =
@@ -81,7 +62,7 @@ const LIST_ICON_BUTTON =
 export function NewAppSidebar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { state, isMobile } = useSidebar();
+  const { state } = useSidebar();
   const dispatch = useDispatch<AppDispatch>();
   const isCollapsed = state === "collapsed";
   const projectId = useActiveProjectId();
@@ -164,14 +145,14 @@ export function NewAppSidebar() {
             <SidebarSeparator className="mx-1" />
 
             {/* Chat actions, styled like the navigation rows above. In icon
-                mode they shrink to icons; their hints show on hover. */}
+                mode they shrink to icons and show their name on hover. */}
             <SidebarGroup className="p-0 shrink-0">
               <SidebarMenu className={cn("gap-1", isCollapsed && "items-center")}>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={startNewChat}
                     disabled={!projectId}
-                    tooltip={actionTooltip("New chat", "Build a new persona", isCollapsed, isMobile)}
+                    tooltip="New chat"
                     className={cn(NAV_ROW, NAV_ROW_IDLE)}
                   >
                     <Plus size={16} className="shrink-0" />
@@ -183,12 +164,7 @@ export function NewAppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={() => dispatch(setPersonaDialog(true))}
-                    tooltip={actionTooltip(
-                      "Start group chat",
-                      "Chat with several personas at once",
-                      isCollapsed,
-                      isMobile,
-                    )}
+                    tooltip="Start group chat"
                     className={cn(NAV_ROW, NAV_ROW_IDLE)}
                   >
                     <Users size={16} className="shrink-0" />

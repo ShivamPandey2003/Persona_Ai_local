@@ -13,15 +13,95 @@ import { authenticate } from "@/test/factories";
 import ConversationPromptInput from "../../../../components/common/Chat/ConversationPromptInput";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+const { navigateSpy } = vi.hoisted(() => ({ navigateSpy: vi.fn() }));
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
   useParams: () => ({ id: "c1" }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigateSpy,
 }));
 
-beforeEach(() => authenticate());
+beforeEach(() => {
+  navigateSpy.mockReset();
+  authenticate();
+});
+
+const GREETING = "Hi! What shall we build?";
+/** A chat opened from "New chat", which hands over the builder's greeting. */
+const openedFromNewChat = () =>
+  ({
+    routerEntries: [
+      {
+        pathname: "/chat/c1",
+        state: { projectId: "p1", opening: { conversationId: "c1", message: GREETING } },
+      },
+    ],
+  }) as never;
 
 describe("ConversationPromptInput", () => {
+  it("shows a handed-over greeting at once, without a skeleton, and never twice", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post(`${API_URL}persona/chat/history`, async () => {
+        await gate;
+        return ok({
+          messages: [{ user_message: null, response: GREETING }],
+          pagination: { total: 1 },
+          data_source_selected: true,
+        });
+      }),
+    );
+    renderWithProviders(<ConversationPromptInput />, openedFromNewChat());
+
+    // Types out while the history is still loading; nothing else stands in.
+    // (Generous wait: the typewriter runs on a timer, slow on a loaded machine.)
+    expect(await screen.findByText(GREETING, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-history-skeleton")).not.toBeInTheDocument();
+
+    release();
+    // The history's copy takes over the same message.
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(/describe your target persona/i)).toBeEnabled(),
+    );
+    expect(screen.getAllByText(GREETING)).toHaveLength(1);
+  });
+
+  it("drops the handed-over greeting from router state, keeping the rest", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat/history`, () =>
+        ok({ messages: [{ user_message: null, response: GREETING }], pagination: { total: 1 } }),
+      ),
+    );
+    renderWithProviders(<ConversationPromptInput />, openedFromNewChat());
+
+    await waitFor(() =>
+      expect(navigateSpy).toHaveBeenCalledWith("/chat/c1", {
+        replace: true,
+        state: { projectId: "p1" },
+      }),
+    );
+  });
+
+  it("ignores a greeting handed over for another chat", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post(`${API_URL}persona/chat/history`, async () => {
+        await gate;
+        return ok({ messages: [], pagination: { total: 0 } });
+      }),
+    );
+    renderWithProviders(<ConversationPromptInput />, {
+      routerEntries: [
+        { pathname: "/chat/c1", state: { opening: { conversationId: "other", message: GREETING } } },
+      ],
+    } as never);
+
+    expect(await screen.findByTestId("chat-history-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText(GREETING)).not.toBeInTheDocument();
+    release();
+  });
+
   it("rehydrates and renders the conversation history", async () => {
     server.use(
       http.post(`${API_URL}persona/chat/history`, () =>
@@ -116,6 +196,48 @@ describe("ConversationPromptInput", () => {
 
     expect(await screen.findByText(/building your personas/i)).toBeInTheDocument();
     expect(await screen.findByText(/this conversation has ended/i)).toBeInTheDocument();
+  });
+
+  it("opens this chat's build results beside it when the build finishes, not the persona panel", async () => {
+    server.use(
+      http.post(`${API_URL}persona/chat/history`, () =>
+        ok({ messages: [], pagination: { total: 0 }, data_source_selected: true }),
+      ),
+      http.post(`${API_URL}persona/chat/message`, () =>
+        ok({
+          id: "c1",
+          messages: [{ role: "assistant", content: "Building now" }],
+          building_persona: 1,
+          job_id: "job-1",
+        }),
+      ),
+      http.post(`${API_URL}projects/job-status`, () =>
+        ok({ job_id: "job-1", status: "done", progress: 100, result: { personas: [] } }),
+      ),
+      http.post(`${API_URL}persona/chat/personas`, () =>
+        ok({
+          conversation_id: "c1",
+          project_id: "p1",
+          build: { job_id: "job-1", status: "done", progress: 100 },
+          summary: {
+            personas_created: 0,
+            insufficient_data: 0,
+            insufficient_data_threshold: 30,
+            unique_studies: 0,
+            unique_respondents: 0,
+          },
+          personas: [],
+        }),
+      ),
+    );
+
+    const { user, store } = renderWithProviders(<ConversationPromptInput />);
+    const textarea = await screen.findByPlaceholderText(/describe your target persona/i);
+    await user.type(textarea, "make my personas{Enter}");
+
+    // Narrow test viewport: the panel comes up as its overlay.
+    expect(await screen.findByRole("dialog", { name: "Build results" })).toBeInTheDocument();
+    expect(store.getState().Project.personaDialog).toBe(false);
   });
 
   it("rehydrates a finished build card from history when the chat is reopened", async () => {

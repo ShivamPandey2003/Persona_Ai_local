@@ -48,6 +48,8 @@ describe("Login mutation", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(localStorage.getItem("user")).toBeNull();
     expect(navigateSpy).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenCalledWith(expect.any(String), { id: "login-error" });
   });
 });
 

@@ -135,7 +135,10 @@ declare type AssumptionVerdict =
 /** A single rendered group-chat message. */
 declare type GroupMessageT = {
     id: string;
-    role: "user" | "persona";
+    /** "system" is one reply for the whole group rather than from a persona —
+     * the fallback when the personas can't answer (off-topic question, missing
+     * or unusable image). */
+    role: "user" | "persona" | "system";
     message: string;
     /** The replying persona (persona messages only). Matches a participant's
      * `persona_id`, which is what "Reply" targets the composer at. */

@@ -55,7 +55,12 @@ export function PageHeaderTitle({
         {title && (
           <>
             <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-            <span className="truncate text-sm font-semibold text-foreground" title={title}>
+            {/* Capped so a long name cuts off early instead of filling the
+                bar; the full name shows on hover. */}
+            <span
+              className="max-w-[min(28rem,40vw)] truncate text-sm font-semibold text-foreground"
+              title={title}
+            >
               {title}
             </span>
           </>

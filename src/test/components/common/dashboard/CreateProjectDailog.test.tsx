@@ -40,7 +40,7 @@ describe("CreateProjectDailog", () => {
     expect(navigateSpy).not.toHaveBeenCalled();
   });
 
-  it("creates a project and navigates to chat on success", async () => {
+  it("creates a project and opens its data-upload step on success", async () => {
     server.use(
       http.post(`${API_URL}projects/create`, () => ok({ project_id: "new-99" })),
     );
@@ -60,9 +60,11 @@ describe("CreateProjectDailog", () => {
       document.querySelector('[data-test-id="SUBMIT_PROJECT"]') as HTMLElement,
     );
 
+    // A new project goes to the upload step first (it hands off to the builder
+    // chat afterwards); the id is in the path so the page survives a refresh.
     await waitFor(() =>
-      expect(navigateSpy).toHaveBeenCalledWith("/chat", {
-        state: { projectId: "new-99" },
+      expect(navigateSpy).toHaveBeenCalledWith("/upload/new-99", {
+        state: { projectId: "new-99", fromCreate: true },
       }),
     );
   });

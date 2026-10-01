@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CircularLoader } from "@/components/ui/loader";
 import { ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CHAT_COLUMN } from "./chatLayout";
+import { CHAT_COLUMN, CHAT_INSET } from "./chatLayout";
 
 type ChatComposerProps = {
   value: string;
@@ -75,7 +75,7 @@ function ChatComposer({
   return (
     <div
       ref={rootRef}
-      className={cn(CHAT_COLUMN, "inset-x-0 bottom-0 shrink-0 px-3 pb-3 md:px-5")}
+      className={cn(CHAT_COLUMN, CHAT_INSET, "inset-x-0 bottom-0 shrink-0 pb-3")}
     >
       <PromptInput
         isLoading={isSending}

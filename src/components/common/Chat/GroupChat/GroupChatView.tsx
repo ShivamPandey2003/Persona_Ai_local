@@ -23,7 +23,6 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,7 @@ import { GradientRingLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
 import { CHAT_COLUMN } from "../chatLayout";
 import { personaColorStyle, personaInitials } from "@/lib/personaColors";
+import { PICK_ITEM, PICK_MENU } from "@/lib/menuStyles";
 
 import LoadingMessage from "../LoadingMessage";
 import ErrorMessage from "../ErrorMessage";
@@ -43,6 +43,11 @@ import VoiceStatusBar from "../VoiceStatusBar";
 import GroupMessage from "./GroupMessage";
 import GroupParticipants from "./GroupParticipants";
 import AssumptionsDialog from "./AssumptionsDialog";
+import {
+  replyThinkingPhrases,
+  UPLOAD_THINKING,
+  type ThinkingTurn,
+} from "./groupChatThinking";
 
 import {
   useGroupHistory,
@@ -72,15 +77,6 @@ const ALL = "all";
 // Per-message "read aloud" button hidden for now — flip to true to bring it back.
 const PER_MESSAGE_SPEAKER_BUTTON_ENABLED = false;
 
-// Status lines under the replies while personas are still to start answering.
-const REPLY_THINKING = [
-  "Reading your question…",
-  "Thinking it over…",
-  "Checking what the data says…",
-  "Putting thoughts into words…",
-] as const;
-// Images go up before the question is sent.
-const UPLOAD_THINKING = ["Uploading your images…"] as const;
 
 // Avatars shown in the recipient pill before it collapses the rest into "+N".
 const RECIPIENT_AVATAR_LIMIT = 3;
@@ -144,6 +140,14 @@ function GroupChatView() {
   // backend name the chat. Drives the Recents poll for that name (see below).
   const [awaitingTitle, setAwaitingTitle] = useState<string | null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  // What the turn being waited on was (who it went to, images, assumptions),
+  // fixed at send so its "thinking" lines describe that turn.
+  const [thinkingTurn, setThinkingTurn] = useState<ThinkingTurn>({
+    personaName: null,
+    withImages: false,
+    withAssumptions: false,
+  });
+  const replyPhrases = useMemo(() => replyThinkingPhrases(thinkingTurn), [thinkingTurn]);
 
   // Image attachments (broadcast-only) staged in the composer.
   const attachments = useImageAttachments();
@@ -192,6 +196,7 @@ function GroupChatView() {
     () => [...history.messages, ...liveMessages],
     [history.messages, liveMessages],
   );
+  const liveIds = useMemo(() => new Set(liveMessages.map((m) => m.id)), [liveMessages]);
 
   const colorByName = useMemo(() => {
     const map: Record<string, string> = {};
@@ -384,6 +389,11 @@ function GroupChatView() {
     // Take ownership of the staged images so their previews keep rendering in
     // the optimistic bubble.
     const staged = attachments.takeAll();
+    setThinkingTurn({
+      personaName: target === ALL ? null : (selectedParticipant?.persona_name ?? null),
+      withImages: staged.length > 0,
+      withAssumptions: assumptionCount > 0,
+    });
     const userMsgId = crypto.randomUUID();
     setInput("");
     appendLive([
@@ -511,10 +521,13 @@ function GroupChatView() {
               Ask a question to hear from {participants.length || "your"} personas.
             </p>
           ) : (
-            messages.map((message) => (
+            messages.map((message, index) => (
               <GroupMessage
                 key={message.id}
                 message={message}
+                // Loaded history eases in top to bottom; this session's
+                // messages appear at once.
+                enterDelayMs={liveIds.has(message.id) ? 0 : Math.min(index, 8) * 40}
                 color={
                   message.persona_name
                     ? colorByName[message.persona_name]
@@ -535,8 +548,14 @@ function GroupChatView() {
               appears. */}
           {(uploading || stream.isWaiting) && (
             <LoadingMessage
-              phrases={uploading ? UPLOAD_THINKING : REPLY_THINKING}
-              label={uploading ? "Uploading images" : "Personas are replying"}
+              phrases={uploading ? UPLOAD_THINKING : replyPhrases}
+              label={
+                uploading
+                  ? "Uploading images"
+                  : thinkingTurn.personaName
+                    ? `${thinkingTurn.personaName} is replying`
+                    : "Personas are replying"
+              }
             />
           )}
 
@@ -544,7 +563,7 @@ function GroupChatView() {
         </ChatContainerContent>
       </ChatContainerRoot>
 
-      {ended && <ChatEnded message="This discussion has ended." />}
+      {ended && <ChatEnded message="This discussion has ended" />}
 
       <ChatComposer
         rootRef={composerRef}
@@ -624,9 +643,9 @@ function GroupChatView() {
               position="popper"
               side="top"
               sideOffset={6}
-              className="max-h-72"
+              className={cn(PICK_MENU, "max-h-72")}
             >
-              <SelectItem value={ALL}>
+              <SelectItem value={ALL} className={PICK_ITEM}>
                 <span className="flex items-center gap-2">
                   <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Users className="size-3" />
@@ -634,9 +653,8 @@ function GroupChatView() {
                   Everyone
                 </span>
               </SelectItem>
-              <SelectSeparator />
               {participants.map((p) => (
-                <SelectItem key={p.persona_id} value={p.persona_id}>
+                <SelectItem key={p.persona_id} value={p.persona_id} className={PICK_ITEM}>
                   <span className="flex items-center gap-2">
                     <span
                       className={cn(

@@ -4,7 +4,11 @@ import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GradientRingLoader, TextShimmerLoader } from "@/components/ui/loader";
+import { PageHeaderTitle } from "@/components/global/PageHeader";
 import PersonaPanel from "./PersonaPanel";
+import BuilderThinking from "./BuilderThinking";
+import ChatComposer from "./ChatComposer";
+import type { BuilderOpening } from "./builderOpening";
 
 import { usePersonaList } from "@/api/Persona/query";
 import { useProjectDataState } from "@/api/Projects/dataFiles";
@@ -19,6 +23,45 @@ function CenteredLoader({ text }: { text: string }) {
     <div className="flex h-[calc(100vh-90px)] flex-col items-center justify-center gap-4 duration-300 animate-in fade-in">
       <GradientRingLoader size="lg" />
       <TextShimmerLoader text={text} />
+    </div>
+  );
+}
+
+// Status lines while the conversation is being created. The last one stays up
+// for however long the start takes.
+const STARTING_PHRASES = [
+  "Setting up your new chat…",
+  "Getting the persona builder ready…",
+  "Preparing a fresh workspace…",
+  "Starting a new persona build…",
+  "Getting ready to hear about your audience…",
+  "Preparing the first question…",
+  "Almost ready…",
+  "Just a moment…",
+] as const;
+
+/**
+ * Stand-in for the chat screen while a new builder conversation is created:
+ * the same layout, with the builder "typing" where its greeting will appear
+ * and the composer waiting. When the conversation exists the real chat takes
+ * over in place and types the greeting out, so there is no full-screen loader
+ * and no jump between screens.
+ */
+function BuilderStartingShell() {
+  return (
+    <div className="flex h-[calc(100vh-90px)] flex-col overflow-hidden duration-300 animate-in fade-in">
+      <PageHeaderTitle title="New persona chat" />
+      <div className="flex-1 overflow-hidden py-8">
+        <BuilderThinking phrases={STARTING_PHRASES} label="Starting the persona builder" />
+      </div>
+      <ChatComposer
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        disabled
+        disabledPlaceholder="Getting the persona builder ready…"
+        placeholder="Describe your target persona…"
+      />
     </div>
   );
 }
@@ -85,7 +128,18 @@ function BuilderEntry({
             title: "New persona chat",
           });
           queryClient.invalidateQueries({ queryKey: ["ChatList", projectId] });
-          navigate(`/chat/${data.id}`, { state: { projectId }, replace: true });
+          // Hand the greeting over so the chat can type it out at once rather
+          // than waiting on its history request (see builderOpening.ts).
+          // Passed verbatim: it must match the saved history text exactly, or
+          // the typing restarts when the history takes over.
+          const greeting = data.messages?.[0]?.content;
+          const opening: BuilderOpening | undefined = greeting?.trim()
+            ? { conversationId: data.id, message: greeting }
+            : undefined;
+          navigate(`/chat/${data.id}`, {
+            state: opening ? { projectId, opening } : { projectId },
+            replace: true,
+          });
         },
         onError: () => setFailed(true),
       },
@@ -112,7 +166,7 @@ function BuilderEntry({
     );
   }
 
-  return <CenteredLoader text="Starting persona builder…" />;
+  return <BuilderStartingShell />;
 }
 
 function ChatEntry() {

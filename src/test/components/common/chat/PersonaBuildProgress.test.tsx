@@ -78,4 +78,71 @@ describe("PersonaBuildProgress", () => {
     await user.click(await screen.findByRole("button", { name: /view personas anyway/i }));
     expect(onViewPersonas).toHaveBeenCalled();
   });
+
+  it("pops each check in and glows once when the build finishes on screen", async () => {
+    const step = (status: string, done: number) => ({
+      key: "matching", label: "Matching respondents", status, done, failed: 0, total: 2,
+    });
+    let calls = 0;
+    server.use(
+      http.post(`${API_URL}projects/job-status`, () => {
+        calls += 1;
+        return calls === 1
+          ? ok({ job_id: "j1", status: "running", progress: 50, result: null, steps: [step("running", 1)] })
+          : ok({ job_id: "j1", status: "done", progress: 100, result: { personas: [] }, steps: [step("done", 2)] });
+      }),
+    );
+    renderWithProviders(<PersonaBuildProgress jobId="j1" />);
+
+    expect(await screen.findByText(/building your personas/i)).toBeInTheDocument();
+    expect(await screen.findByText("Personas built", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(document.querySelector("[data-popped]")).not.toBeNull();
+    expect(document.querySelector("[data-celebrate]")).not.toBeNull();
+  });
+
+  it("shows a build that was already done without replaying it", async () => {
+    const snapshot = {
+      job_id: "j1",
+      status: "done" as const,
+      progress: 100,
+      steps: [{ key: "matching", label: "Matching respondents", status: "done" as const, done: 2, failed: 0, total: 2 }],
+    };
+    renderWithProviders(<PersonaBuildProgress jobId="j1" snapshot={snapshot} />);
+
+    expect(await screen.findByText("Personas built")).toBeInTheDocument();
+    expect(document.querySelector("[data-popped]")).toBeNull();
+    expect(document.querySelector("[data-celebrate]")).toBeNull();
+  });
+
+  it("toggles the build results panel once the build is done", async () => {
+    jobStatus({ status: "done", progress: 100, result: { personas: [] } });
+    const onToggleResults = vi.fn();
+    const { user, rerender } = renderWithProviders(
+      <PersonaBuildProgress jobId="j1" onToggleResults={onToggleResults} />,
+    );
+
+    const open = await screen.findByRole("button", { name: "View build results" });
+    expect(open).toHaveAttribute("aria-expanded", "false");
+    await user.click(open);
+    expect(onToggleResults).toHaveBeenCalledTimes(1);
+
+    rerender(<PersonaBuildProgress jobId="j1" resultsOpen onToggleResults={onToggleResults} />);
+    expect(screen.getByRole("button", { name: "Hide build results" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("offers the results panel for a failed build too", async () => {
+    jobStatus({ status: "failed" });
+    renderWithProviders(<PersonaBuildProgress jobId="j1" onToggleResults={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "View build results" })).toBeInTheDocument();
+  });
+
+  it("doesn't offer the results panel while the build runs", async () => {
+    jobStatus({ status: "running" });
+    renderWithProviders(<PersonaBuildProgress jobId="j1" onToggleResults={vi.fn()} />);
+    await screen.findByText(/building your personas/i);
+    expect(screen.queryByRole("button", { name: /build results/i })).not.toBeInTheDocument();
+  });
 });

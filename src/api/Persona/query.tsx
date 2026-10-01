@@ -94,6 +94,72 @@ export const usePersonaDashboard = (projectId: string | undefined) => {
 };
 
 /* ------------------------------------------------------------------ */
+/* One builder chat's personas ("Build results")                      */
+/* ------------------------------------------------------------------ */
+
+/** A persona in a builder chat's build results: dashboard shape plus extras. */
+export type BuildResultPersona = DashboardPersona & {
+  persona_index: number | null;
+  /** False until run_query has written this persona's results. */
+  has_query_results: boolean;
+  /** Palette word (green, blue, …) in build order, as group chat assigns it. */
+  color: string;
+};
+
+export type BuilderPersonasResponse = {
+  conversation_id: string;
+  project_id: string;
+  /** Null until the chat's build has been dispatched. */
+  build: {
+    job_id: string;
+    status: "queued" | "running" | "done" | "failed";
+    progress: number;
+  } | null;
+  summary: {
+    personas_created: number;
+    insufficient_data: number;
+    insufficient_data_threshold: number;
+    unique_studies: number;
+    unique_respondents: number;
+  };
+  personas: BuildResultPersona[];
+};
+
+export const builderPersonasKey = (conversationId: string | undefined) => [
+  "BuilderPersonas",
+  conversationId,
+];
+
+/** Refresh cadence (ms) while the build is still analysing its personas. */
+const BUILD_RESULTS_POLL_MS = 4000;
+
+/**
+ * POST /v1/persona/chat/personas — the personas one builder chat built, with
+ * their study/evidence results. Keeps refreshing while the build is still
+ * running, so results fill in without reopening anything. Silent: the drawer
+ * shows its own error state rather than a toast on top of it.
+ */
+export const useBuilderPersonas = (conversationId: string | undefined) => {
+  const token = getAuthToken();
+  return useQuery<BuilderPersonasResponse>({
+    queryKey: builderPersonasKey(conversationId),
+    queryFn: () =>
+      postApi<BuilderPersonasResponse>(
+        "persona/chat/personas",
+        { token, conversation_id: conversationId },
+        { silent: true },
+      ),
+    enabled: Boolean(token && conversationId),
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    refetchInterval: (query) => {
+      const status = query.state.data?.build?.status;
+      return status === "queued" || status === "running" ? BUILD_RESULTS_POLL_MS : false;
+    },
+  });
+};
+
+/* ------------------------------------------------------------------ */
 /* persona_query background job (run_query)                           */
 /* ------------------------------------------------------------------ */
 
