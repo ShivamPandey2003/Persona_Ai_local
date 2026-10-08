@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   Download,
+  Ellipsis,
   ImagePlus,
   Loader2,
   Mic,
@@ -88,6 +89,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const ALL = "all";
 
@@ -606,25 +613,48 @@ function GroupChatView() {
               : "Download insights"}
           </span>
         </Button> */}
-        <Button
-          variant="inverse"
-          disabled={insightsMut.isPending || sending || messages.length === 0}
-          onClick={async () => {
-            setDownloadDialogOpen(true);
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              disabled={sending || messages.length === 0}
+              aria-label="More actions"
+              title="More actions"
+            >
+              <Ellipsis className="size-5" />
+            </Button>
+          </DropdownMenuTrigger>
 
-            try {
-              await getDownloadInsightsLimit();
-            } catch {
-              // Error can be handled in the dialog UI
-            }
-          }}
-          aria-label="Download Insights"
-        >
-          <Download aria-hidden="true" />
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              disabled={insightsMut.isPending}
+              onClick={async () => {
+                setDownloadDialogOpen(true);
 
-          <span className="hidden sm:inline">Download Insights</span>
-        </Button>
-        <Button onClick={handlePushToInsignAI}>Push To Insign AI</Button>
+                try {
+                  await getDownloadInsightsLimit();
+                } catch {
+                  // Error can be handled in the dialog UI
+                }
+              }}
+            >
+              {/* {insightsMut.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )} */}
+
+              <span>Download insights</span>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={handlePushToInsignAI}>
+              {/* <MoveRight className="size-4" /> */}
+              <span>Generate prompt</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </PageHeaderActions>
 
       <ChatContainerRoot
@@ -964,8 +994,13 @@ function GroupChatView() {
           {/* Header */}
           <DialogHeader className="shrink-0">
             <DialogDescription className="text-md font-semibold text-foreground">
-              Review the questionnaire prompt before pushing it to Insign AI.
+              Review the questionnaire prompt before proceeding to Insign AI.
             </DialogDescription>
+
+            <p className="text-sm text-muted-foreground">
+              Please copy the prompt before proceeding to Insign AI, as you will
+              need it to continue.
+            </p>
           </DialogHeader>
 
           {/* Prompt Content */}
@@ -978,7 +1013,7 @@ function GroupChatView() {
                   <span>Loading prompt...</span>
                 </div>
               ) : surveyPrompt ? (
-                <pre className="m-0 w-full whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground">
+                <pre className="min-h-0 w-full whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground">
                   {surveyPrompt}
                 </pre>
               ) : (
@@ -1063,7 +1098,7 @@ function GroupChatView() {
               }}
             >
               <MoveRight className="size-4" />
-              Push
+              Go To Insign AI
             </Button>
           </DialogFooter>
         </DialogContent>
