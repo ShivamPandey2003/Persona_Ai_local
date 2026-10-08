@@ -624,7 +624,7 @@ function GroupChatView() {
 
           <span className="hidden sm:inline">Download Insights</span>
         </Button>
-        <Button onClick={handlePushToInsignAI}>Push to Insign AI</Button>
+        <Button onClick={handlePushToInsignAI}>Push To Insign AI</Button>
       </PageHeaderActions>
 
       <ChatContainerRoot
