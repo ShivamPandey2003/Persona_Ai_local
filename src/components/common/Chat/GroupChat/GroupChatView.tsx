@@ -971,7 +971,7 @@ function GroupChatView() {
           {/* Prompt Content */}
           <div className="relative min-h-0 flex-1">
             {/* Scrollable Prompt */}
-            <div className="h-[70vh] rounded-lg border bg-muted/30 p-4">
+            <div className="h-[70vh] overflow-auto rounded-lg border bg-muted/30 p-4">
               {isSurveyPromptLoading ? (
                 <div className="flex min-h-125 items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-8 animate-spin text-primary" />
