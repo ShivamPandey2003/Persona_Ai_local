@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import {
+  Check,
+  Copy,
   Download,
   ImagePlus,
   Loader2,
   Mic,
+  MoveRight,
   SlidersHorizontal,
   Square,
   Users,
@@ -26,7 +29,10 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { PageHeaderActions, PageHeaderTitle } from "@/components/global/PageHeader";
+import {
+  PageHeaderActions,
+  PageHeaderTitle,
+} from "@/components/global/PageHeader";
 import { GradientRingLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
 import { CHAT_COLUMN } from "../chatLayout";
@@ -58,6 +64,9 @@ import { useChatList } from "@/api/Chat/query";
 import {
   useDownloadGroupInsights,
   uploadGroupImages,
+  useGroupSurveyPrompt,
+  useGroupDownloadInsightsLimit,
+  useGroupSurveyPromptLimit,
 } from "@/api/GroupChat/mutation";
 import { useGroupChatStream } from "@/api/GroupChat/useGroupChatStream";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
@@ -71,12 +80,19 @@ import { useVoiceConfig } from "@/api/Voice/voice";
 import { useMicRecorder } from "@/hooks/useMicRecorder";
 import { useSpeakerPreference } from "@/hooks/useSpeakerPreference";
 import { speechPlayer } from "@/lib/voice/speechPlayer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const ALL = "all";
 
 // Per-message "read aloud" button hidden for now — flip to true to bring it back.
 const PER_MESSAGE_SPEAKER_BUTTON_ENABLED = false;
-
 
 // Avatars shown in the recipient pill before it collapses the rest into "+N".
 const RECIPIENT_AVATAR_LIMIT = 3;
@@ -92,10 +108,17 @@ const COMPOSER_TOOL =
  * The avatar stack inside the recipient pill when messaging everyone. Phones
  * get just the first avatar so the pill and the composer tools share one row.
  */
-function RecipientAvatars({ participants }: { participants: GroupParticipant[] }) {
+function RecipientAvatars({
+  participants,
+}: {
+  participants: GroupParticipant[];
+}) {
   if (participants.length === 0) {
     return (
-      <span className={cn(RECIPIENT_AVATAR, "bg-primary/10 text-primary")} aria-hidden="true">
+      <span
+        className={cn(RECIPIENT_AVATAR, "bg-primary/10 text-primary")}
+        aria-hidden="true"
+      >
         <Users className="size-3.5" />
       </span>
     );
@@ -117,7 +140,12 @@ function RecipientAvatars({ participants }: { participants: GroupParticipant[] }
         </span>
       ))}
       {extra > 0 && (
-        <span className={cn(RECIPIENT_AVATAR, "bg-muted text-muted-foreground max-sm:hidden")}>
+        <span
+          className={cn(
+            RECIPIENT_AVATAR,
+            "bg-muted text-muted-foreground max-sm:hidden",
+          )}
+        >
           +{extra}
         </span>
       )}
@@ -147,7 +175,10 @@ function GroupChatView() {
     withImages: false,
     withAssumptions: false,
   });
-  const replyPhrases = useMemo(() => replyThinkingPhrases(thinkingTurn), [thinkingTurn]);
+  const replyPhrases = useMemo(
+    () => replyThinkingPhrases(thinkingTurn),
+    [thinkingTurn],
+  );
 
   // Image attachments (broadcast-only) staged in the composer.
   const attachments = useImageAttachments();
@@ -161,7 +192,9 @@ function GroupChatView() {
     awaitTitleFor: awaitingTitle ?? undefined,
   });
   // Shown in the top bar as "project › chat title".
-  const chatTitle = chatList?.find((c) => c.kind === "group" && c.id === groupId)?.title;
+  const chatTitle = chatList?.find(
+    (c) => c.kind === "group" && c.id === groupId,
+  )?.title;
 
   const participantsQuery = useGroupChatParticipants(groupId);
   const insightsMut = useDownloadGroupInsights(groupId ?? "");
@@ -170,7 +203,10 @@ function GroupChatView() {
   const assumptionsQuery = useGroupAssumptions(groupId);
   const assumptionCount = assumptionsQuery.data?.assumptions.length ?? 0;
 
-  const participants = useMemo(() => participantsQuery.data ?? [], [participantsQuery.data]);
+  const participants = useMemo(
+    () => participantsQuery.data ?? [],
+    [participantsQuery.data],
+  );
 
   // Replies can land after the user has moved to another group chat (the view
   // is reused across routes); they must not be shown or spoken there.
@@ -196,7 +232,10 @@ function GroupChatView() {
     () => [...history.messages, ...liveMessages],
     [history.messages, liveMessages],
   );
-  const liveIds = useMemo(() => new Set(liveMessages.map((m) => m.id)), [liveMessages]);
+  const liveIds = useMemo(
+    () => new Set(liveMessages.map((m) => m.id)),
+    [liveMessages],
+  );
 
   const colorByName = useMemo(() => {
     const map: Record<string, string> = {};
@@ -226,9 +265,13 @@ function GroupChatView() {
     (message: GroupMessageT): string | undefined => {
       if (message.role !== "persona") return undefined;
       if (message.persona_id) {
-        return replyTargets.byId.has(message.persona_id) ? message.persona_id : undefined;
+        return replyTargets.byId.has(message.persona_id)
+          ? message.persona_id
+          : undefined;
       }
-      return message.persona_name ? replyTargets.byName.get(message.persona_name) : undefined;
+      return message.persona_name
+        ? replyTargets.byName.get(message.persona_name)
+        : undefined;
     },
     [replyTargets],
   );
@@ -390,7 +433,8 @@ function GroupChatView() {
     // the optimistic bubble.
     const staged = attachments.takeAll();
     setThinkingTurn({
-      personaName: target === ALL ? null : (selectedParticipant?.persona_name ?? null),
+      personaName:
+        target === ALL ? null : (selectedParticipant?.persona_name ?? null),
       withImages: staged.length > 0,
       withAssumptions: assumptionCount > 0,
     });
@@ -447,6 +491,59 @@ function GroupChatView() {
       .finally(() => setUploading(false));
   };
 
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [insignDialogOpen, setInsignDialogOpen] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
+  const {
+    mutateAsync: getDownloadInsightsLimit,
+    data: downloadInsightsData,
+    isPending: isDownloadInsightsLoading,
+  } = useGroupDownloadInsightsLimit(groupId);
+
+  const { mutateAsync: getSurveyPrompt, isPending: isSurveyPromptLoading } =
+    useGroupSurveyPrompt(groupId);
+
+  const [surveyPrompt, setSurveyPrompt] = useState("");
+  const {
+    mutateAsync: getSurveyPromptLimit,
+    data: surveyPromptLimitData,
+    isPending: isSurveyPromptLimitLoading,
+  } = useGroupSurveyPromptLimit(groupId);
+
+  const handlePushToInsignAI = async () => {
+    setPromptCopied(false);
+    setSurveyPrompt("");
+    setInsignDialogOpen(true);
+
+    try {
+      const response = await getSurveyPrompt();
+
+      const latestPrompt = response?.prompt ?? "";
+
+      setSurveyPrompt(latestPrompt);
+
+      // Call limit API only after survey prompt API succeeds
+      await getSurveyPromptLimit();
+    } catch (error) {
+      setSurveyPrompt("");
+    }
+  };
+  const handleCopyInsignPrompt = async () => {
+    if (!surveyPrompt) {
+      toast.error("Prompt is not available.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(surveyPrompt);
+
+      setPromptCopied(true);
+
+      toast.success("Prompt copied successfully.");
+    } catch {
+      toast.error("Failed to copy prompt");
+    }
+  };
   const canAttach =
     !ended && !sending && !micBusy && attachments.items.length < MAX_IMAGES;
 
@@ -454,7 +551,10 @@ function GroupChatView() {
     return (
       <div className="flex h-[calc(100vh-90px)] items-center justify-center">
         <ErrorMessage
-          error={{ name: "GroupChatError", message: "Couldn't load this group chat." }}
+          error={{
+            name: "GroupChatError",
+            message: "Couldn't load this group chat.",
+          }}
         />
       </div>
     );
@@ -474,7 +574,9 @@ function GroupChatView() {
           onClick={() => setAssumptionsOpen(true)}
           // The label is hidden on narrow screens; keep the button named.
           aria-label={
-            assumptionCount > 0 ? `Assumptions (${assumptionCount} applied)` : "Assumptions"
+            assumptionCount > 0
+              ? `Assumptions (${assumptionCount} applied)`
+              : "Assumptions"
           }
         >
           <SlidersHorizontal aria-hidden="true" />
@@ -485,11 +587,13 @@ function GroupChatView() {
             </span>
           )}
         </Button>
-        <Button
+        {/* <Button
           variant="inverse"
           disabled={insightsMut.isPending || sending || messages.length === 0}
           onClick={() => insightsMut.mutate()}
-          aria-label={insightsMut.isPending ? "Preparing insights…" : "Download insights"}
+          aria-label={
+            insightsMut.isPending ? "Preparing insights…" : "Download insights"
+          }
         >
           {insightsMut.isPending ? (
             <Loader2 className="animate-spin" aria-hidden="true" />
@@ -497,9 +601,30 @@ function GroupChatView() {
             <Download aria-hidden="true" />
           )}
           <span className="hidden sm:inline">
-            {insightsMut.isPending ? "Preparing insights…" : "Download insights"}
+            {insightsMut.isPending
+              ? "Preparing insights…"
+              : "Download insights"}
           </span>
+        </Button> */}
+        <Button
+          variant="inverse"
+          disabled={insightsMut.isPending || sending || messages.length === 0}
+          onClick={async () => {
+            setDownloadDialogOpen(true);
+
+            try {
+              await getDownloadInsightsLimit();
+            } catch {
+              // Error can be handled in the dialog UI
+            }
+          }}
+          aria-label="Download insights"
+        >
+          <Download aria-hidden="true" />
+
+          <span className="hidden sm:inline">Download insights</span>
         </Button>
+        <Button onClick={handlePushToInsignAI}>Push TO Insign</Button>
       </PageHeaderActions>
 
       <ChatContainerRoot
@@ -517,8 +642,14 @@ function GroupChatView() {
           {history.isInitialLoading ? (
             <ChatHistorySkeleton />
           ) : messages.length === 0 ? (
-            <p className={cn(CHAT_COLUMN, "px-10 text-center text-sm text-muted-foreground")}>
-              Ask a question to hear from {participants.length || "your"} personas.
+            <p
+              className={cn(
+                CHAT_COLUMN,
+                "px-10 text-center text-sm text-muted-foreground",
+              )}
+            >
+              Ask a question to hear from {participants.length || "your"}{" "}
+              personas.
             </p>
           ) : (
             messages.map((message, index) => (
@@ -527,7 +658,9 @@ function GroupChatView() {
                 message={message}
                 // Loaded history eases in top to bottom; this session's
                 // messages appear at once.
-                enterDelayMs={liveIds.has(message.id) ? 0 : Math.min(index, 8) * 40}
+                enterDelayMs={
+                  liveIds.has(message.id) ? 0 : Math.min(index, 8) * 40
+                }
                 color={
                   message.persona_name
                     ? colorByName[message.persona_name]
@@ -537,9 +670,15 @@ function GroupChatView() {
                 // Same locks as the recipient picker, plus a persona that can
                 // still be messaged.
                 onReply={
-                  !ended && !micBusy && replyTargetOf(message) ? handleReply : undefined
+                  !ended && !micBusy && replyTargetOf(message)
+                    ? handleReply
+                    : undefined
                 }
-                onSpeak={PER_MESSAGE_SPEAKER_BUTTON_ENABLED && ttsEnabled ? handleSpeak : undefined}
+                onSpeak={
+                  PER_MESSAGE_SPEAKER_BUTTON_ENABLED && ttsEnabled
+                    ? handleSpeak
+                    : undefined
+                }
               />
             ))
           )}
@@ -612,7 +751,11 @@ function GroupChatView() {
           ) : undefined
         }
         leftSlot={
-          <Select value={target} onValueChange={setTarget} disabled={ended || micBusy}>
+          <Select
+            value={target}
+            onValueChange={setTarget}
+            disabled={ended || micBusy}
+          >
             <SelectTrigger
               aria-label="Choose who to message"
               className="min-w-0 max-w-[240px] gap-2 rounded-full border-primary/15 bg-primary/5 py-1 pl-1.5 pr-3 text-primary hover:bg-primary/10 data-[size=default]:h-9 dark:bg-primary/10 dark:hover:bg-primary/15 [&>svg]:text-primary/70"
@@ -620,7 +763,9 @@ function GroupChatView() {
               {target === ALL ? (
                 <span className="flex min-w-0 items-center gap-2">
                   <RecipientAvatars participants={participants} />
-                  <span className="truncate text-sm font-semibold">Everyone</span>
+                  <span className="truncate text-sm font-semibold">
+                    Everyone
+                  </span>
                 </span>
               ) : (
                 <span className="flex min-w-0 items-center gap-2">
@@ -654,7 +799,11 @@ function GroupChatView() {
                 </span>
               </SelectItem>
               {participants.map((p) => (
-                <SelectItem key={p.persona_id} value={p.persona_id} className={PICK_ITEM}>
+                <SelectItem
+                  key={p.persona_id}
+                  value={p.persona_id}
+                  className={PICK_ITEM}
+                >
                   <span className="flex items-center gap-2">
                     <span
                       className={cn(
@@ -705,7 +854,9 @@ function GroupChatView() {
                     "bg-destructive/10 text-destructive ring-2 ring-destructive/30 hover:bg-destructive/15 hover:text-destructive",
                 )}
                 disabled={
-                  ended || mic.status === "requesting" || mic.status === "transcribing"
+                  ended ||
+                  mic.status === "requesting" ||
+                  mic.status === "transcribing"
                 }
                 onClick={handleMicClick}
                 aria-label={
@@ -716,9 +867,14 @@ function GroupChatView() {
                       : "Record voice message"
                 }
                 aria-pressed={mic.status === "recording"}
-                title={mic.status === "recording" ? "Stop recording" : "Record voice message"}
+                title={
+                  mic.status === "recording"
+                    ? "Stop recording"
+                    : "Record voice message"
+                }
               >
-                {mic.status === "transcribing" || mic.status === "requesting" ? (
+                {mic.status === "transcribing" ||
+                mic.status === "requesting" ? (
                   <Loader2 size={18} className="animate-spin" />
                 ) : mic.status === "recording" ? (
                   <Square size={14} className="animate-pulse fill-current" />
@@ -738,9 +894,15 @@ function GroupChatView() {
                 )}
                 disabled={micBusy}
                 onClick={handleToggleReadAloud}
-                aria-label={readAloudPref ? "Stop reading replies aloud" : "Read replies aloud"}
+                aria-label={
+                  readAloudPref
+                    ? "Stop reading replies aloud"
+                    : "Read replies aloud"
+                }
                 aria-pressed={readAloudPref}
-                title={readAloudPref ? "Reading replies aloud" : "Read replies aloud"}
+                title={
+                  readAloudPref ? "Reading replies aloud" : "Read replies aloud"
+                }
               >
                 {readAloudPref ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </Button>
@@ -754,6 +916,158 @@ function GroupChatView() {
         onOpenChange={setAssumptionsOpen}
         groupId={groupId}
       />
+      <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Download insights</DialogTitle>
+            <div className="py-2 text-sm text-muted-foreground">
+              {isDownloadInsightsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-4">
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                </div>
+              ) : (
+                <>
+                  You have downloaded{" "}
+                  <span className="font-semibold text-foreground">
+                    {downloadInsightsData?.used ?? 0}
+                  </span>{" "}
+                  out of{" "}
+                  <span className="font-semibold text-foreground">
+                    {downloadInsightsData?.limit ?? 0}
+                  </span>{" "}
+                  downloads.
+                </>
+              )}
+            </div>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              disabled={
+                isDownloadInsightsLoading ||
+                (downloadInsightsData?.remaining ?? 0) <= 0
+              }
+              onClick={() => {
+                insightsMut.mutate();
+                setDownloadDialogOpen(false);
+              }}
+            >
+              <Download />
+              Download
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={insignDialogOpen} onOpenChange={setInsignDialogOpen}>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
+          {/* Header */}
+          <DialogHeader className="shrink-0">
+            <DialogDescription className="text-md font-semibold text-foreground">
+              Review the questionnaire prompt before pushing it to Insign AI.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Prompt Content */}
+          <div className="relative min-h-0 flex-1">
+            {/* Scrollable Prompt */}
+            <div className="h-[70vh] rounded-lg border bg-muted/30 p-4">
+              {isSurveyPromptLoading ? (
+                <div className="flex min-h-125 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-8 animate-spin text-primary" />
+                  <span>Loading prompt...</span>
+                </div>
+              ) : surveyPrompt ? (
+                <pre className="m-0 w-full whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground">
+                  {surveyPrompt}
+                </pre>
+              ) : (
+                <div className="flex min-h-125 items-center justify-center">
+                  <p className="text-center text-sm text-muted-foreground">
+                    Prompt Not available.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Fixed Copy Button */}
+            {surveyPrompt && !isSurveyPromptLoading && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="absolute right-3 top-3 z-20 bg-background shadow-sm"
+                onClick={handleCopyInsignPrompt}
+                disabled={!surveyPrompt}
+                aria-label="Copy prompt"
+                title={promptCopied ? "Copied" : "Copy prompt"}
+              >
+                {promptCopied ? (
+                  <Check className="size-4" />
+                ) : (
+                  <Copy className="size-4" />
+                )}
+              </Button>
+            )}
+          </div>
+
+          {/* Footer */}
+          <DialogFooter className="shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              {isSurveyPromptLimitLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                </div>
+              ) : (
+                <>
+                  You have generated{" "}
+                  <span className="font-semibold text-foreground">
+                    {surveyPromptLimitData?.used ?? 0}
+                  </span>{" "}
+                  out of{" "}
+                  <span className="font-semibold text-foreground">
+                    {surveyPromptLimitData?.limit ?? 0}
+                  </span>{" "}
+                  prompts.
+                </>
+              )}
+            </div>
+
+            <Button
+              type="button"
+              disabled={
+                !surveyPrompt ||
+                isSurveyPromptLoading ||
+                isSurveyPromptLimitLoading
+              }
+              onClick={() => {
+                if (!surveyPrompt) {
+                  toast.info("No prompt available.");
+                  return;
+                }
+
+                if (!promptCopied) {
+                  toast.info(
+                    "Before pushing to Insign AI, please copy the prompt using the copy icon.",
+                  );
+                  return;
+                }
+
+                window.open(
+                  "https://dev.viewcurry.com/insignai/#/",
+                  "_blank",
+                  "noopener,noreferrer",
+                );
+
+                setInsignDialogOpen(false);
+              }}
+            >
+              <MoveRight className="size-4" />
+              Push
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -211,7 +211,9 @@ export const useAddAssumption = (groupId: string) => {
     onSuccess: (result) => {
       // Only an applied assumption changes the stored list.
       if (result.status === "approved") {
-        queryClient.invalidateQueries({ queryKey: groupAssumptionsKey(groupId) });
+        queryClient.invalidateQueries({
+          queryKey: groupAssumptionsKey(groupId),
+        });
       }
     },
   });
@@ -220,14 +222,21 @@ export const useAddAssumption = (groupId: string) => {
 /** POST /v1/persona/group-chat/assumptions/remove — stops it shaping replies. */
 export const useRemoveAssumption = (groupId: string) => {
   const token = getAuthToken();
-  return useMutation<{ assumption_id: string }, Error, { assumptionId: string }>({
+  return useMutation<
+    { assumption_id: string },
+    Error,
+    { assumptionId: string }
+  >({
     mutationKey: ["RemoveAssumption", groupId],
     mutationFn: ({ assumptionId }) =>
-      postApi<{ assumption_id: string }>("persona/group-chat/assumptions/remove", {
-        token,
-        group_id: groupId,
-        assumption_id: assumptionId,
-      }),
+      postApi<{ assumption_id: string }>(
+        "persona/group-chat/assumptions/remove",
+        {
+          token,
+          group_id: groupId,
+          assumption_id: assumptionId,
+        },
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: groupAssumptionsKey(groupId) });
     },
@@ -289,3 +298,82 @@ export const useDownloadGroupInsights = (groupId: string) =>
       URL.revokeObjectURL(url);
     },
   });
+
+type GroupSurveyPromptResponse = {
+  prompt: string;
+};
+
+export const useGroupSurveyPrompt = (groupId: string | undefined) => {
+  const token = getAuthToken();
+
+  return useMutation<GroupSurveyPromptResponse, Error, void>({
+    mutationKey: ["group-survey-prompt", groupId],
+    mutationFn: () => {
+      if (!groupId) {
+        return Promise.reject(new Error("Group ID is required"));
+      }
+
+      return postApi<GroupSurveyPromptResponse>(
+        "persona/group-chat/survey-prompt",
+        {
+          token,
+          group_id: groupId,
+        },
+      );
+    },
+  });
+};
+
+type GroupDownloadInsightsLimitResponse = {
+  used: number;
+  limit: number;
+  remaining: number;
+};
+
+export const useGroupDownloadInsightsLimit = (groupId: string | undefined) => {
+  const token = getAuthToken();
+
+  return useMutation<GroupDownloadInsightsLimitResponse, Error, void>({
+    mutationKey: ["group-download-insights-limit", groupId],
+    mutationFn: () => {
+      if (!groupId) {
+        return Promise.reject(new Error("Group ID is required"));
+      }
+
+      return postApi<GroupDownloadInsightsLimitResponse>(
+        "persona/group-chat/insights/limit",
+        {
+          token,
+          group_id: groupId,
+        },
+      );
+    },
+  });
+};
+
+type GroupSurveyPromptLimitResponse = {
+  used: number;
+  limit: number;
+  remaining: number;
+};
+
+export const useGroupSurveyPromptLimit = (groupId: string | undefined) => {
+  const token = getAuthToken();
+
+  return useMutation<GroupSurveyPromptLimitResponse, Error, void>({
+    mutationKey: ["group-survey-prompt-limit", groupId],
+    mutationFn: () => {
+      if (!groupId) {
+        return Promise.reject(new Error("Group ID is required"));
+      }
+
+      return postApi<GroupSurveyPromptLimitResponse>(
+        "persona/group-chat/survey-prompt/limit",
+        {
+          token,
+          group_id: groupId,
+        },
+      );
+    },
+  });
+};

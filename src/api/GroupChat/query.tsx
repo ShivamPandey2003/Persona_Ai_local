@@ -46,12 +46,15 @@ export const useGroupHistory = (groupId: string | undefined) => {
 
   const fetchPage = useCallback(
     async (offset: number, limit: number) => {
-      const data = await postApi<GroupHistoryResponse>("persona/group-chat/history", {
-        token,
-        group_id: groupId,
-        limit,
-        offset,
-      });
+      const data = await postApi<GroupHistoryResponse>(
+        "persona/group-chat/history",
+        {
+          token,
+          group_id: groupId,
+          limit,
+          offset,
+        },
+      );
       const items = data.messages ?? [];
       return { items, total: data.pagination?.total ?? items.length };
     },
@@ -180,7 +183,6 @@ export const useGroupAssumptions = (groupId: string | undefined) => {
   });
 };
 
-
 export const groupSuggestionsKey = (groupId: string | undefined) => [
   "GroupAssumptionSuggestions",
   groupId,
@@ -210,3 +212,5 @@ export const useHeldSuggestions = (groupId: string | undefined) =>
     staleTime: Infinity,
     gcTime: Infinity,
   });
+
+

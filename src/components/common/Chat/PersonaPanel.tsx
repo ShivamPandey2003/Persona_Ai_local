@@ -71,17 +71,17 @@ const INSUFFICIENT_DATA_TOOLTIP =
  * on its row/card's left edge (the row must be `relative`), named for
  * assistive tech.
  */
-function FromThisChatEdge() {
-  return (
-    <>
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-primary/70"
-      />
-      <span className="sr-only">Built in this chat</span>
-    </>
-  );
-}
+// function FromThisChatEdge() {
+//   return (
+//     <>
+//       <span
+//         aria-hidden="true"
+//         className="pointer-events-none absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-primary/70"
+//       />
+//       <span className="sr-only">Built in this chat</span>
+//     </>
+//   );
+// }
 
 /** Shown in place of the status so a non-selectable persona says why at a glance. */
 function InsufficientDataBadge() {
@@ -622,7 +622,7 @@ function PersonaPanel({
                 {personas.length > 0 ? ` · ${personas.length}` : ""}
               </p>
               {/* Key for the edge tab, only while a marked persona is on screen. */}
-              {showsChatPersonas && (
+              {/* {showsChatPersonas && (
                 <span
                   aria-hidden="true"
                   data-testid="chat-personas-legend"
@@ -631,7 +631,7 @@ function PersonaPanel({
                   <span className="h-3 w-[3px] rounded-full bg-primary/70" />
                   Built in this chat
                 </span>
-              )}
+              )} */}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <DropdownMenu>
@@ -869,11 +869,12 @@ function PersonaPanel({
                       className={cn(
                         "relative scroll-mt-1 rounded-xl border bg-card ring-1 ring-foreground/5 transition-[box-shadow,background-color,border-color] duration-300 hover:shadow-md",
                         "animate-in fade-in slide-in-from-bottom-1 motion-reduce:animate-none",
+                         fromThisChat ? "bg-emerald-100/50 border border-emerald-700/20 border-l-4 border-l-emerald-600" : "bg-card",
                         isHighlighted && "border-primary/30 bg-primary/[0.03]",
                         isSelected && "ring-2 ring-primary",
                       )}
                     >
-                      {fromThisChat && <FromThisChatEdge />}
+                      {/* {fromThisChat && <FromThisChatEdge />} */}
                       <div className="flex items-center gap-3 p-3">
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -936,7 +937,7 @@ function PersonaPanel({
                               className="w-full rounded-md border border-input bg-background px-1.5 py-0.5 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                             />
                           ) : (
-                            <div className="group/name flex items-center gap-1">
+                            <div className="group/name flex items-center gap-2">
                               <p
                                 className="truncate text-sm font-semibold text-foreground"
                                 title={
@@ -958,6 +959,11 @@ function PersonaPanel({
                               >
                                 <Pencil className="h-3 w-3" />
                               </button>
+                              { fromThisChat && (
+                                <p className="text-xs bg-emerald-200/60 text-emerald-900 font-semibold border border-emerald-600/30 rounded-full px-3 py-0.5">
+                                  Built-in
+                                </p>
+                              )}
                             </div>
                           )}
                           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -1129,7 +1135,7 @@ function PersonaPanel({
                         isSelected && "ring-2 ring-primary",
                       )}
                     >
-                      {fromThisChat && <FromThisChatEdge />}
+                      {/* {fromThisChat && <FromThisChatEdge />} */}
                       <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-3">
