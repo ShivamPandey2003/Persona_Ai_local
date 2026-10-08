@@ -503,10 +503,10 @@ function PersonaPanel({
   );
 
   // Whether any persona on screen carries the "built in this chat" edge.
-  const showsChatPersonas = useMemo(
-    () => Boolean(chatPersonaIds?.size) && personas.some((p) => chatPersonaIds?.has(p.persona_id)),
-    [chatPersonaIds, personas],
-  );
+  // const showsChatPersonas = useMemo(
+  //   () => Boolean(chatPersonaIds?.size) && personas.some((p) => chatPersonaIds?.has(p.persona_id)),
+  //   [chatPersonaIds, personas],
+  // );
 
   const selectablePersonas = useMemo(
     () => personas.filter((p) => !isInsufficientData(p.persona_id)),
