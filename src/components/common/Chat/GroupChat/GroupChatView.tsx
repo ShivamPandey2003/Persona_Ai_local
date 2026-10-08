@@ -618,13 +618,13 @@ function GroupChatView() {
               // Error can be handled in the dialog UI
             }
           }}
-          aria-label="Download insights"
+          aria-label="Download Insights"
         >
           <Download aria-hidden="true" />
 
-          <span className="hidden sm:inline">Download insights</span>
+          <span className="hidden sm:inline">Download Insights</span>
         </Button>
-        <Button onClick={handlePushToInsignAI}>Push TO Insign</Button>
+        <Button onClick={handlePushToInsignAI}>Push to Insign AI</Button>
       </PageHeaderActions>
 
       <ChatContainerRoot
