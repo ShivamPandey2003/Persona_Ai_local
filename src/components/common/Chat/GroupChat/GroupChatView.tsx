@@ -6,7 +6,7 @@ import {
   Cog,
   Copy,
   Download,
-  Ellipsis,
+  // Ellipsis,
   EllipsisVertical,
   ImagePlus,
   Loader2,
