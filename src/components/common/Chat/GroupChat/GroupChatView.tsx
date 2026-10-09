@@ -3,10 +3,8 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import {
   Check,
-  Cog,
   Copy,
   Download,
-  // Ellipsis,
   EllipsisVertical,
   ImagePlus,
   Loader2,
@@ -525,18 +523,22 @@ function GroupChatView() {
     setInsignDialogOpen(true);
 
     try {
-      const response = await getSurveyPrompt();
+      // Call the limit API before fetching the prompt.
+      await getSurveyPromptLimit();
 
+      // Fetch the survey prompt.
+      const response = await getSurveyPrompt();
       const latestPrompt = response?.prompt ?? "";
 
       setSurveyPrompt(latestPrompt);
 
-      // Call limit API only after survey prompt API succeeds
+      // Call the limit API again after fetching the prompt.
       await getSurveyPromptLimit();
     } catch (error) {
       setSurveyPrompt("");
     }
   };
+
   const handleCopyInsignPrompt = async () => {
     if (!surveyPrompt) {
       toast.error("Prompt is not available.");
@@ -648,12 +650,12 @@ function GroupChatView() {
                 <Download className="size-4" />
               )} */}
               <Download className="size-4 text-muted-foreground" />
-              <span>Download insights</span>
+              <span>Download Insights</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem onClick={handlePushToInsignAI}>
-              <Cog className="size-4 text-muted-foreground" />
-              <span>Generate prompt</span>
+              <MoveRight className="size-4 text-muted-foreground" />
+              <span>Push to Insign AI</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -996,13 +998,13 @@ function GroupChatView() {
           {/* Header */}
           <DialogHeader className="shrink-0">
             <DialogDescription className="text-md font-semibold text-foreground">
-              Review the questionnaire prompt before proceeding to Insign AI.
+              Your questionnaire prompt is ready. Please copy and paste it into OptiBot to continue.
             </DialogDescription>
 
-            <p className="text-sm text-muted-foreground">
+            {/* <p className="text-sm text-muted-foreground">
               Please copy the prompt before proceeding to Insign AI, as you will
               need it to continue.
-            </p>
+            </p> */}
           </DialogHeader>
 
           {/* Prompt Content */}
