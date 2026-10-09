@@ -3,9 +3,11 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import {
   Check,
+  Cog,
   Copy,
   Download,
   Ellipsis,
+  EllipsisVertical,
   ImagePlus,
   Loader2,
   Mic,
@@ -623,7 +625,7 @@ function GroupChatView() {
               aria-label="More actions"
               title="More actions"
             >
-              <Ellipsis className="size-5" />
+              <EllipsisVertical className="size-5" />
             </Button>
           </DropdownMenuTrigger>
 
@@ -645,12 +647,12 @@ function GroupChatView() {
               ) : (
                 <Download className="size-4" />
               )} */}
-
+              <Download className="size-4 text-muted-foreground" />
               <span>Download insights</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem onClick={handlePushToInsignAI}>
-              {/* <MoveRight className="size-4" /> */}
+              <Cog className="size-4 text-muted-foreground" />
               <span>Generate prompt</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
