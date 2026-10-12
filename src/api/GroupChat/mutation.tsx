@@ -355,6 +355,7 @@ type GroupSurveyPromptLimitResponse = {
   used: number;
   limit: number;
   remaining: number;
+  prompt: string;
 };
 
 export const useGroupSurveyPromptLimit = (groupId: string | undefined) => {

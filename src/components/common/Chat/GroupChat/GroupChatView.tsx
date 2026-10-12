@@ -10,6 +10,7 @@ import {
   Loader2,
   Mic,
   MoveRight,
+  RefreshCcw,
   SlidersHorizontal,
   Square,
   Users,
@@ -517,25 +518,57 @@ function GroupChatView() {
     isPending: isSurveyPromptLimitLoading,
   } = useGroupSurveyPromptLimit(groupId);
 
+  // const handlePushToInsignAI = async () => {
+  //   setPromptCopied(false);
+  //   setSurveyPrompt("");
+  //   setInsignDialogOpen(true);
+
+  //   try {
+  //     // Call the limit API before fetching the prompt.
+  //     await getSurveyPromptLimit();
+
+  //     // Fetch the survey prompt.
+  //     const response = await getSurveyPrompt();
+  //     const latestPrompt = response?.prompt ?? "";
+
+  //     setSurveyPrompt(latestPrompt);
+
+  //     // Call the limit API again after fetching the prompt.
+  //     await getSurveyPromptLimit();
+  //   } catch (error) {
+  //     setSurveyPrompt("");
+  //   }
+  // };
+
   const handlePushToInsignAI = async () => {
     setPromptCopied(false);
     setSurveyPrompt("");
     setInsignDialogOpen(true);
 
     try {
-      // Call the limit API before fetching the prompt.
-      await getSurveyPromptLimit();
+      const response = await getSurveyPromptLimit();
 
-      // Fetch the survey prompt.
-      const response = await getSurveyPrompt();
-      const latestPrompt = response?.prompt ?? "";
-
-      setSurveyPrompt(latestPrompt);
-
-      // Call the limit API again after fetching the prompt.
-      await getSurveyPromptLimit();
+      setSurveyPrompt(response?.prompt ?? "");
     } catch (error) {
       setSurveyPrompt("");
+      toast.error("Failed to load the questionnaire prompt.");
+    }
+  };
+
+  const handleGeneratePrompt = async () => {
+    try {
+      setPromptCopied(false);
+
+      // Generate or regenerate the questionnaire prompt
+      const response = await getSurveyPrompt();
+
+      // Refresh the prompt limit data
+      const limitResponse = await getSurveyPromptLimit();
+
+      // Use the prompt returned by the prompt limit API
+      setSurveyPrompt(limitResponse?.prompt ?? response?.prompt ?? "");
+    } catch (error) {
+      toast.error("Failed to generate the questionnaire prompt.");
     }
   };
 
@@ -979,26 +1012,44 @@ function GroupChatView() {
             <Button
               disabled={
                 isDownloadInsightsLoading ||
+                insightsMut.isPending ||
                 (downloadInsightsData?.remaining ?? 0) <= 0
               }
               onClick={() => {
-                insightsMut.mutate();
+                toast.info("Download is in progress. This may take some time.");
+
+                insightsMut.mutate(undefined, {
+                  onSuccess: () => {
+                    toast.success("Insights downloaded successfully.");
+                  },
+                  onError: (error) => {
+                    toast.error(
+                      error?.message || "Failed to download insights.",
+                    );
+                  },
+                });
+
                 setDownloadDialogOpen(false);
               }}
             >
-              <Download />
-              Download
+              {insightsMut.isPending ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Download />
+              )}
+              {insightsMut.isPending ? "Downloading..." : "Download"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={insignDialogOpen} onOpenChange={setInsignDialogOpen}>
-        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
+        <DialogContent className="flex min-h-0 max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
           {/* Header */}
-          <DialogHeader className="shrink-0">
+          <DialogHeader className="shrink-0 pr-8 sm:pr-0">
             <DialogDescription className="text-md font-semibold text-foreground">
-              Your questionnaire prompt is ready. Please copy and paste it into OptiBot to continue.
+              Your questionnaire prompt is ready. Please copy and paste it into
+              OptiBot to continue.
             </DialogDescription>
 
             {/* <p className="text-sm text-muted-foreground">
@@ -1010,7 +1061,7 @@ function GroupChatView() {
           {/* Prompt Content */}
           <div className="relative min-h-0 flex-1">
             {/* Scrollable Prompt */}
-            <div className="h-[70vh] overflow-auto rounded-lg border bg-muted/30 p-4">
+            <div className="h-[60vh] sm:h-[70vh] overflow-auto rounded-lg border bg-muted/30 p-4">
               {isSurveyPromptLoading ? (
                 <div className="flex min-h-125 items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-8 animate-spin text-primary" />
@@ -1051,7 +1102,7 @@ function GroupChatView() {
           </div>
 
           {/* Footer */}
-          <DialogFooter className="shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <DialogFooter className="shrink-0 flex-col gap-3 border-t bg-background pt-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-muted-foreground">
               {isSurveyPromptLimitLoading ? (
                 <div className="flex items-center gap-2">
@@ -1071,39 +1122,57 @@ function GroupChatView() {
                 </>
               )}
             </div>
-
-            <Button
-              type="button"
-              disabled={
-                !surveyPrompt ||
-                isSurveyPromptLoading ||
-                isSurveyPromptLimitLoading
-              }
-              onClick={() => {
-                if (!surveyPrompt) {
-                  toast.info("No prompt available.");
-                  return;
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Button
+                variant="inverse"
+                onClick={handleGeneratePrompt}
+                disabled={
+                  isSurveyPromptLoading ||
+                  isSurveyPromptLimitLoading ||
+                  (surveyPromptLimitData?.remaining ?? 0) <= 0
                 }
+              >
+                {(surveyPromptLimitData?.used ?? 0) > 0 && (
+                  <RefreshCcw className="size-4" />
+                )}
+                {(surveyPromptLimitData?.used ?? 0) === 0
+                  ? "Generate Prompt"
+                  : "Regenerate Prompt"}
+              </Button>
 
-                if (!promptCopied) {
-                  toast.info(
-                    "Before pushing to Insign AI, please copy the prompt using the copy icon.",
+              <Button
+                type="button"
+                disabled={
+                  !surveyPrompt ||
+                  isSurveyPromptLoading ||
+                  isSurveyPromptLimitLoading
+                }
+                onClick={() => {
+                  if (!surveyPrompt) {
+                    toast.info("No prompt available.");
+                    return;
+                  }
+
+                  if (!promptCopied) {
+                    toast.info(
+                      "Before pushing to Insign AI, please copy the prompt using the copy icon.",
+                    );
+                    return;
+                  }
+
+                  window.open(
+                    "https://dev.viewcurry.com/insignai/#/",
+                    "_blank",
+                    "noopener,noreferrer",
                   );
-                  return;
-                }
 
-                window.open(
-                  "https://dev.viewcurry.com/insignai/#/",
-                  "_blank",
-                  "noopener,noreferrer",
-                );
-
-                setInsignDialogOpen(false);
-              }}
-            >
-              <MoveRight className="size-4" />
-              Go To Insign AI
-            </Button>
+                  setInsignDialogOpen(false);
+                }}
+              >
+                <MoveRight className="size-4" />
+                Go To Insign AI
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
