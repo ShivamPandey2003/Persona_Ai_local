@@ -568,7 +568,7 @@ function GroupChatView() {
       // Use the prompt returned by the prompt limit API
       setSurveyPrompt(limitResponse?.prompt ?? response?.prompt ?? "");
     } catch (error) {
-      toast.error("Failed to generate the questionnaire prompt.");
+      // toast.error("Failed to generate the questionnaire prompt.");
     }
   };
 
@@ -1022,11 +1022,11 @@ function GroupChatView() {
                   onSuccess: () => {
                     toast.success("Insights downloaded successfully.");
                   },
-                  onError: (error) => {
-                    toast.error(
-                      error?.message || "Failed to download insights.",
-                    );
-                  },
+                  // onError: (error) => {
+                  //   toast.error(
+                  //     error?.message || "Failed to download insights.",
+                  //   );
+                  // },
                 });
 
                 setDownloadDialogOpen(false);
